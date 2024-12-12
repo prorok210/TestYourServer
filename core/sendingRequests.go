@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
@@ -12,6 +11,7 @@ import (
 type RequestInfo struct {
 	Time     time.Duration
 	Response *http.Response
+	Request  *http.Request
 }
 
 const COUNT_WORKERS = 10
@@ -75,13 +75,14 @@ func sendReqLoop(cl http.Client, req <-chan *http.Request, out chan<- *RequestIn
 			return
 		case rq := <-req:
 			start := time.Now()
-			r, err := cl.Do(rq)
+			resp, err := cl.Do(rq)
 			if err != nil {
-				fmt.Println(err)
+				out <- nil
 			}
 			reqInfo := &RequestInfo{
 				time.Since(start),
-				r,
+				resp,
+				rq,
 			}
 			out <- reqInfo
 		}

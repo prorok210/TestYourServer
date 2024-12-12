@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/prorok210/TestYourServer/core"
 
@@ -28,9 +29,10 @@ func CreateAppWindow() {
 	var isTesting bool
 	var testButton *widget.Button
 
+	showRequest := widget.NewCheck("Show Request", nil)
 	showTime := widget.NewCheck("Show Time", nil)
 	showBody := widget.NewCheck("Show Body (only first 1000 bytes)", nil)
-	showHeaders := widget.NewCheck("Show Headers", nil)
+	showHeaders := widget.NewCheck("Show Headers (only first 10 headers)", nil)
 
 	testButton = widget.NewButton("Start testing", func() {
 		if isTesting {
@@ -44,7 +46,22 @@ func CreateAppWindow() {
 
 			go func() {
 				var lastRequests []string
-				maxLines := 50
+				maxLines := 20
+
+				updateTicker := time.NewTicker(100 * time.Millisecond)
+				defer updateTicker.Stop()
+
+				var pendingUpdate bool
+
+				updateUI := func() {
+					if !pendingUpdate {
+						return
+					}
+					text := strings.Join(lastRequests, "\n")
+					entry.SetText(text)
+					pendingUpdate = false
+				}
+
 				for {
 					select {
 					case <-ctx.Done():
@@ -52,6 +69,9 @@ func CreateAppWindow() {
 					case resp := <-outChan:
 						if resp != nil && resp.Response != nil {
 							var responseText string
+							if showRequest.Checked {
+								responseText += fmt.Sprintf("Request: %v %v\n", resp.Request.Method, resp.Request.URL)
+							}
 							if showTime.Checked {
 								responseText += fmt.Sprintf("Time: %v\n", resp.Time)
 							}
@@ -71,8 +91,14 @@ func CreateAppWindow() {
 							}
 							if showHeaders.Checked {
 								responseText += "Headers:\n"
+								counter := 0
 								for k, v := range resp.Response.Header {
 									responseText += fmt.Sprintf("%s: %s\n", k, v)
+									counter++
+									if counter >= 10 {
+										responseText += fmt.Sprintf("...")
+										break
+									}
 								}
 							}
 
@@ -80,11 +106,15 @@ func CreateAppWindow() {
 							if len(lastRequests) > maxLines {
 								lastRequests = lastRequests[1:]
 							}
-
-							entry.SetText(strings.Join(lastRequests, "\n"))
+							if resp.Response.Body != nil {
+								resp.Response.Body.Close()
+							}
+							pendingUpdate = true
 						} else {
-							entry.SetText(entry.Text + "Error with get response\n")
+							entry.SetText("Error with get response\n")
 						}
+					case <-updateTicker.C:
+						updateUI()
 					}
 				}
 			}()
@@ -93,7 +123,7 @@ func CreateAppWindow() {
 		}
 	})
 
-	optionsContainer := container.NewVBox(showTime, showBody, showHeaders)
+	optionsContainer := container.NewVBox(showRequest, showTime, showBody, showHeaders)
 
 	w.SetContent(container.NewBorder(container.NewVBox(testButton, optionsContainer), nil, nil, nil, scrollContainer))
 
