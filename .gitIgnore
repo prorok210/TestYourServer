@@ -1,0 +1,9 @@
+*.o
+*.exe
+*.a
+*.dll
+*.so
+*.out
+*.bin
+*.run
+.gitIgnore
