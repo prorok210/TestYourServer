@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prorok210/TestYourServer/core"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/prorok210/TestYourServer/core"
 )
 
 func CreateAppWindow() {
@@ -28,6 +28,7 @@ func CreateAppWindow() {
 
 	var isTesting bool
 	var testButton *widget.Button
+	var activRequsts []RequestRow
 
 	showRequest := widget.NewCheck("Show Request", nil)
 	showTime := widget.NewCheck("Show Time", nil)
@@ -123,10 +124,27 @@ func CreateAppWindow() {
 		}
 	})
 
+	var confWindowOpen bool
+	configRequestsButton := widget.NewButton("Configurate requests", func() {
+		if !confWindowOpen {
+			showConfReqWindow(&activRequsts, &confWindowOpen)
+			confWindowOpen = true
+		}
+	})
+
+	w.SetCloseIntercept(func() {
+		if confWindowOpen {
+			dialog.ShowInformation("Info", "Please close the settings window before exiting.", w)
+		} else {
+			w.Close()
+		}
+	})
+
 	optionsContainer := container.NewVBox(showRequest, showTime, showBody, showHeaders)
 
-	w.SetContent(container.NewBorder(container.NewVBox(testButton, optionsContainer), nil, nil, nil, scrollContainer))
+	w.SetContent(container.NewBorder(container.NewVBox(optionsContainer, testButton, configRequestsButton), nil, nil, nil, scrollContainer))
 
 	w.Resize(fyne.NewSize(1000, 1000))
+
 	w.ShowAndRun()
 }

@@ -14,6 +14,15 @@ type RequestInfo struct {
 	Request  *http.Request
 }
 
+type ReqSendingSettings struct {
+	Requests            []*http.Request
+	Count_Workers       uint
+	Delay               time.Time
+	Rand                bool
+	RequestChanBufSize  uint
+	ResponseChanBufSize uint
+}
+
 const COUNT_WORKERS = 10
 
 func StartSendingHttpRequests(outCh chan<- *RequestInfo, ctx context.Context) {
