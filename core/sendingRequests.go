@@ -3,33 +3,47 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"math/rand"
 	"net/http"
 	"time"
+)
+
+const (
+	DEFAULT_DELAY                  = 100 * time.Millisecond
+	DEFAULT_DURATION               = 60 * time.Second
+	DEFAULT_COUNT_WORKERS          = 10
+	DEFAULT_REQUEST_CHAN_BUF_SIZE  = 10
+	DEFAULT_RESPONSE_CHAN_BUF_SIZE = 10
 )
 
 type RequestInfo struct {
 	Time     time.Duration
 	Response *http.Response
 	Request  *http.Request
+	Err      error
 }
 
 type ReqSendingSettings struct {
-	Requests            []*http.Request
+	Requests            []http.Request
 	Count_Workers       uint
-	Delay               time.Time
-	Rand                bool
+	Delay               time.Duration
+	Duration            time.Duration
 	RequestChanBufSize  uint
 	ResponseChanBufSize uint
 }
 
-const COUNT_WORKERS = 10
+func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, ctx context.Context) {
+	reqSettings = setReqSettings(reqSettings)
+	if reqSettings.Requests == nil {
+		outCh <- &RequestInfo{Err: errors.New("No requests")}
+		return
+	}
 
-func StartSendingHttpRequests(outCh chan<- *RequestInfo, ctx context.Context) {
 	reqChanMap := make(map[chan *http.Request]struct{})
 
-	for i := 0; i < COUNT_WORKERS; i++ {
-		rqCh := make(chan *http.Request, 5)
+	for i := 0; i < int(reqSettings.Count_Workers); i++ {
+		rqCh := make(chan *http.Request, reqSettings.RequestChanBufSize)
 		reqChanMap[rqCh] = struct{}{}
 
 		customTransport := &http.Transport{
@@ -40,25 +54,6 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, ctx context.Context) {
 		go sendReqLoop(cl, rqCh, outCh, ctx)
 	}
 
-	requests := []*http.Request{
-		{
-			Method: "GET",
-			URL:    mustParseURL("https://193.233.114.35:8446/image/get"),
-		},
-		{
-			Method: "POST",
-			URL:    mustParseURL("https://193.233.114.35:8446/user/create"),
-		},
-		{
-			Method: "GET",
-			URL:    mustParseURL("https://193.233.114.35:8446/user/me"),
-		},
-		{
-			Method: "GET",
-			URL:    mustParseURL("https://193.233.114.35:8446/user/get/1"),
-		},
-	}
-
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	go func() {
 		for {
@@ -67,9 +62,9 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, ctx context.Context) {
 				return
 			default:
 				for reqCh := range reqChanMap {
-					index := r.Intn(len(requests))
-					reqCh <- requests[index]
-					time.Sleep(time.Millisecond * 10)
+					index := r.Intn(len(reqSettings.Requests))
+					reqCh <- &reqSettings.Requests[index]
+					time.Sleep(reqSettings.Delay)
 				}
 			}
 
@@ -85,13 +80,12 @@ func sendReqLoop(cl http.Client, req <-chan *http.Request, out chan<- *RequestIn
 		case rq := <-req:
 			start := time.Now()
 			resp, err := cl.Do(rq)
-			if err != nil {
-				out <- nil
-			}
+
 			reqInfo := &RequestInfo{
 				time.Since(start),
 				resp,
 				rq,
+				err,
 			}
 			out <- reqInfo
 		}

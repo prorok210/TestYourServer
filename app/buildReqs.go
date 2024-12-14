@@ -1,10 +1,15 @@
 package app
 
 import (
+	"io"
+	"net/http"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/prorok210/TestYourServer/core"
 )
 
 type RequestRow struct {
@@ -14,7 +19,7 @@ type RequestRow struct {
 	container *fyne.Container
 }
 
-func showConfReqWindow(reqs *[]RequestRow, winOpen *bool) {
+func showConfReqWindow(reqsRows *[]RequestRow, reqs *[]http.Request, winOpen *bool) {
 	confWindow := fyne.CurrentApp().NewWindow("Configure Requests")
 
 	requestsContainer := container.NewVBox()
@@ -41,7 +46,7 @@ func showConfReqWindow(reqs *[]RequestRow, winOpen *bool) {
 		return row
 	}
 
-	for _, req := range *reqs {
+	for _, req := range *reqsRows {
 		methodSelect := req.method
 		methodSelect.Resize(fyne.NewSize(methodSelect.MinSize().Width, 30))
 		urlEntry := req.url
@@ -60,13 +65,19 @@ func showConfReqWindow(reqs *[]RequestRow, winOpen *bool) {
 	requestsContainer.Add(createRequestRow())
 
 	addButton := widget.NewButton("Add Request", func() {
-		if len(*reqs)+len(requestsContainer.Objects) >= 10 {
+		if len(*reqsRows)+len(requestsContainer.Objects) >= 10 {
 			dialog.ShowInformation("Error", "You can add a maximum of 10 requests", confWindow)
 			return
 		}
 		requestsContainer.Add(createRequestRow())
 	})
 	applyButton := widget.NewButton("Apply", func() {
+		defer func() {
+			*winOpen = false
+			confWindow.Close()
+		}()
+
+		*reqsRows = nil
 		*reqs = nil
 
 		for _, obj := range requestsContainer.Objects {
@@ -76,16 +87,19 @@ func showConfReqWindow(reqs *[]RequestRow, winOpen *bool) {
 				bodyEntry := row.Objects[2].(*widget.Entry)
 
 				if methodSelect.Selected != "" && urlEntry.Text != "" {
-					*reqs = append(*reqs, RequestRow{
+					*reqsRows = append(*reqsRows, RequestRow{
 						method: methodSelect,
 						url:    urlEntry,
 						body:   bodyEntry,
 					})
+					*reqs = append(*reqs, http.Request{
+						Method: methodSelect.Selected,
+						URL:    core.MustParseURL(urlEntry.Text),
+						Body:   io.NopCloser(strings.NewReader(bodyEntry.Text)),
+					})
 				}
 			}
 		}
-		*winOpen = false
-		confWindow.Close()
 	})
 
 	confWindow.SetCloseIntercept(func() {
