@@ -64,6 +64,7 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 				for reqCh := range reqChanMap {
 					index := r.Intn(len(reqSettings.Requests))
 					reqCh <- &reqSettings.Requests[index]
+					reqSettings.Requests[index].Body.Close()
 					time.Sleep(reqSettings.Delay)
 				}
 			}

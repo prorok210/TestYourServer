@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/prorok210/TestYourServer/core"
 )
@@ -21,11 +22,13 @@ func CreateAppWindow() {
 	w := a.NewWindow("Test Your Server")
 
 	entry := widget.NewMultiLineEntry()
-	entry.SetPlaceHolder("There will be information about the request here...")
+	entry.SetPlaceHolder("There will be information about the requests here...")
 
 	// Test button
-	var testButton *widget.Button
-	var testIsActiv bool
+	var (
+		testButton  *widget.Button
+		testIsActiv bool
+	)
 
 	// Configurate requests
 	var (
@@ -35,8 +38,34 @@ func CreateAppWindow() {
 		activRequsts         []http.Request
 	)
 
-	scrollContainer := container.NewScroll(entry)
+	// Protocol selection
+	var (
+		protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
+	)
 
+	// Report button
+	var (
+		reportButton *widget.Button = widget.NewButton("Report", func() {})
+	)
+
+	// Sliders for delay and duration
+	delaySlider := widget.NewSlider(1, 60000)
+	delaySlider.Step = 10
+	delaySlider.SetValue(1)
+
+	durationSlider := widget.NewSlider(1, 60)
+	durationSlider.Step = 0.5
+	durationSlider.SetValue(1)
+
+	// Entry for delay and duration
+	delayEntry := widget.NewEntry()
+	delayEntry.SetText("1 мин")
+	delayEntry.Resize(fyne.NewSize(100, 1000))
+	durationEntry := widget.NewEntry()
+	durationEntry.SetText("1 мин")
+	durationEntry.Resize(fyne.NewSize(100, 1000))
+
+	// Options for showing request
 	showRequest := widget.NewCheck("Show Request", nil)
 	showTime := widget.NewCheck("Show Time", nil)
 	showBody := widget.NewCheck("Show Body (only first 1000 bytes)", nil)
@@ -189,11 +218,64 @@ func CreateAppWindow() {
 		}
 	})
 
-	optionsContainer := container.NewVBox(showRequest, showTime, showBody, showHeaders)
+	// horizontal container for delay and duration
+	delayContainer := container.NewHBox(
+		widget.NewLabel("Request delay"),
+		container.NewGridWrap(fyne.NewSize(300, 40), delaySlider),
+		container.NewGridWrap(fyne.NewSize(70, 40), delayEntry),
+	)
+	durationContainer := container.NewHBox(
+		widget.NewLabel("Test duration  "),
+		container.NewGridWrap(fyne.NewSize(300, 40), durationSlider),
+		container.NewGridWrap(fyne.NewSize(70, 40), durationEntry),
+	)
 
-	w.SetContent(container.NewBorder(container.NewVBox(optionsContainer, testButton, configRequestsButton), nil, nil, nil, scrollContainer))
+	// Left panel of options
+	optionsContainer := container.NewVBox(
+		container.NewVBox(
+			widget.NewLabel("Testing options"),
+			showRequest,
+			showBody,
+			showHeaders,
+			showTime,
+		),
 
-	w.Resize(fyne.NewSize(1000, 1000))
+		layout.NewSpacer(),
+		container.NewVBox(
+			delayContainer,
+			durationContainer,
+		),
+		layout.NewSpacer(),
+		container.NewHBox(
+			container.NewGridWrap(fyne.NewSize(35, 40), container.New(layout.NewHBoxLayout())),
+			container.NewGridWrap(fyne.NewSize(150, 40), protocolButton),
+			container.NewGridWrap(fyne.NewSize(100, 40), container.New(layout.NewHBoxLayout())),
+			container.NewGridWrap(fyne.NewSize(150, 40), configRequestsButton),
+		),
+		layout.NewSpacer(),
+	)
+
+	// Scroll container
+	scrollContainer := container.NewScroll(entry)
+
+	top := container.NewHSplit(optionsContainer, scrollContainer)
+	top.SetOffset(0.3)
+
+	content := container.NewVSplit(
+		top,
+		container.NewAdaptiveGrid(5,
+			layout.NewSpacer(),
+			container.NewGridWrap(fyne.NewSize(150, 40), reportButton),
+			layout.NewSpacer(),
+			container.NewGridWrap(fyne.NewSize(150, 40), testButton),
+			layout.NewSpacer(),
+		),
+	)
+	content.SetOffset(0.95)
+
+	w.SetContent(content)
+
+	w.Resize(fyne.NewSize(1200, 600))
 
 	w.ShowAndRun()
 }
