@@ -21,8 +21,8 @@ func CreateAppWindow() {
 	a := app.New()
 	w := a.NewWindow("Test Your Server")
 
-	entry := widget.NewMultiLineEntry()
-	entry.SetPlaceHolder("There will be information about the requests here...")
+	infoReqsGrid := widget.NewTextGrid()
+	infoReqsGrid.SetText("There will be information about the requests here...")
 
 	// Test button
 	var (
@@ -45,24 +45,24 @@ func CreateAppWindow() {
 
 	// Report button
 	var (
-		reportButton *widget.Button = widget.NewButton("Report", func() {})
+		reportButton *widget.Button = widget.NewButton("Show report", func() {})
 	)
 
 	// Sliders for delay and duration
-	delaySlider := widget.NewSlider(1, 60000)
+	delaySlider := widget.NewSlider(1, 6000)
 	delaySlider.Step = 10
-	delaySlider.SetValue(1)
+	delaySlider.SetValue(200)
 
 	durationSlider := widget.NewSlider(1, 60)
 	durationSlider.Step = 0.5
-	durationSlider.SetValue(1)
+	durationSlider.SetValue(5)
 
 	// Entry for delay and duration
 	delayEntry := widget.NewEntry()
-	delayEntry.SetText("1 мин")
+	delayEntry.SetText("200 ms")
 	delayEntry.Resize(fyne.NewSize(100, 1000))
 	durationEntry := widget.NewEntry()
-	durationEntry.SetText("1 мин")
+	durationEntry.SetText("5 min")
 	durationEntry.Resize(fyne.NewSize(100, 1000))
 
 	// Options for showing request
@@ -116,7 +116,7 @@ func CreateAppWindow() {
 						return
 					}
 					text := strings.Join(lastRequests, "\n")
-					entry.SetText(text)
+					infoReqsGrid.SetText(text)
 					pendingUpdate = false
 				}
 
@@ -256,7 +256,7 @@ func CreateAppWindow() {
 	)
 
 	// Scroll container
-	scrollContainer := container.NewScroll(entry)
+	scrollContainer := container.NewScroll(infoReqsGrid)
 
 	top := container.NewHSplit(optionsContainer, scrollContainer)
 	top.SetOffset(0.3)
