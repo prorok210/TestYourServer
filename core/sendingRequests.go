@@ -8,14 +8,21 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 )
 
 const (
-	DEFAULT_DELAY                  = 100 * time.Millisecond
-	DEFAULT_DURATION               = 60 * time.Second
+	DEFAULT_REQ_DELAY              = 100 * time.Millisecond
+	MIN_REQ_DELAY                  = 1 * time.Millisecond
+	MAX_REQ_DELAY                  = 6000 * time.Millisecond
+	DEFAULT_DURATION               = 5 * time.Minute
+	MIN_DURATION                   = 1 * time.Minute
+	MAX_DURATION                   = 60 * time.Minute
 	DEFAULT_COUNT_WORKERS          = 10
+	MAX_CCOUNT_WORKERS             = 100
 	DEFAULT_REQUEST_CHAN_BUF_SIZE  = 10
+	MAX_CHAN_BUF_SIZE              = 100
 	DEFAULT_RESPONSE_CHAN_BUF_SIZE = 10
 )
 
@@ -27,12 +34,17 @@ type RequestInfo struct {
 }
 
 type ReqSendingSettings struct {
-	Requests            []http.Request
+	Requests            []*http.Request
 	Count_Workers       uint
 	Delay               time.Duration
 	Duration            time.Duration
 	RequestChanBufSize  uint
 	ResponseChanBufSize uint
+}
+
+type CachedRequest struct {
+	*http.Request
+	cachedBody []byte
 }
 
 func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, ctx context.Context) {
@@ -42,69 +54,61 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 		return
 	}
 
-	reqChanMap := make(map[chan *http.Request]struct{})
+	cachedRequests := make([]*CachedRequest, len(reqSettings.Requests))
+	for i, req := range reqSettings.Requests {
+		cachedReq := &CachedRequest{Request: req}
+		if req.Body != nil {
+			body, _ := io.ReadAll(req.Body)
+			cachedReq.cachedBody = body
+			req.Body.Close()
+		}
+		cachedRequests[i] = cachedReq
+	}
 
+	var wg sync.WaitGroup
 	for i := 0; i < int(reqSettings.Count_Workers); i++ {
-		rqCh := make(chan *http.Request, reqSettings.RequestChanBufSize)
-		reqChanMap[rqCh] = struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			customTransport := &http.Transport{
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+				MaxIdleConns:        MAX_CCOUNT_WORKERS,
+				MaxIdleConnsPerHost: MAX_CCOUNT_WORKERS,
+			}
+			cl := http.Client{Transport: customTransport}
 
-		customTransport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		cl := http.Client{Transport: customTransport}
+			ticker := time.NewTicker(reqSettings.Delay)
+			defer ticker.Stop()
 
-		go sendReqLoop(cl, rqCh, outCh, ctx)
-	}
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				for reqCh := range reqChanMap {
-					index := r.Intn(len(reqSettings.Requests))
-					reqCh <- &reqSettings.Requests[index]
-					reqSettings.Requests[index].Body.Close()
-					time.Sleep(reqSettings.Delay)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					index := r.Intn(len(cachedRequests))
+					cached := cachedRequests[index]
+
+					reqCopy := cached.Request.Clone(ctx)
+					if cached.cachedBody != nil {
+						reqCopy.Body = io.NopCloser(bytes.NewReader(cached.cachedBody))
+					}
+
+					start := time.Now()
+					resp, err := cl.Do(reqCopy)
+
+					outCh <- &RequestInfo{
+						Time:     time.Since(start),
+						Response: resp,
+						Request:  cached.Request,
+						Err:      err,
+					}
 				}
 			}
-
-		}
-	}()
-}
-
-func sendReqLoop(cl http.Client, reqCh <-chan *http.Request, outCh chan<- *RequestInfo, ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case rq := <-reqCh:
-			reqCopy := new(http.Request)
-			*reqCopy = *rq
-
-			if rq.Body != nil {
-				bodyBytes, err := io.ReadAll(rq.Body)
-				if err != nil {
-					outCh <- &RequestInfo{Err: err}
-					continue
-				}
-				rq.Body.Close()
-
-				rq.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-				reqCopy.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			}
-
-			start := time.Now()
-			resp, err := cl.Do(reqCopy)
-
-			outCh <- &RequestInfo{
-				time.Since(start),
-				resp,
-				rq,
-				err,
-			}
-		}
+		}()
 	}
+
+	<-ctx.Done()
+	wg.Wait()
 }

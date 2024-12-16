@@ -18,7 +18,7 @@ func setReqSettings(reqSettings *ReqSendingSettings) *ReqSendingSettings {
 		return &ReqSendingSettings{
 			Requests:            nil,
 			Count_Workers:       DEFAULT_COUNT_WORKERS,
-			Delay:               DEFAULT_DELAY,
+			Delay:               DEFAULT_REQ_DELAY,
 			Duration:            DEFAULT_DURATION,
 			RequestChanBufSize:  DEFAULT_REQUEST_CHAN_BUF_SIZE,
 			ResponseChanBufSize: DEFAULT_RESPONSE_CHAN_BUF_SIZE,
@@ -29,7 +29,7 @@ func setReqSettings(reqSettings *ReqSendingSettings) *ReqSendingSettings {
 		reqSettings.Count_Workers = DEFAULT_COUNT_WORKERS
 	}
 	if reqSettings.Delay == 0 || reqSettings.Delay > 60*time.Second {
-		reqSettings.Delay = DEFAULT_DELAY
+		reqSettings.Delay = DEFAULT_REQ_DELAY
 	}
 	if reqSettings.Duration == 0 || reqSettings.Duration > 60*time.Minute {
 		reqSettings.Duration = DEFAULT_DURATION

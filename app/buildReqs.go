@@ -20,7 +20,7 @@ type RequestRow struct {
 	container *fyne.Container
 }
 
-func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]http.Request, winOpen *bool) {
+func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *bool) {
 	confWindow := fyne.CurrentApp().NewWindow("Configure Requests")
 
 	requestsContainer := container.NewVBox()
@@ -205,7 +205,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]http.Request, winOpen *b
 						delete:    deleteButton,
 						container: row,
 					})
-					*reqs = append(*reqs, http.Request{
+					*reqs = append(*reqs, &http.Request{
 						Method: methodSelect.Selected,
 						URL:    core.MustParseURL(urlEntry.Text),
 						Body:   io.NopCloser(strings.NewReader(bodyEntry.Text)),

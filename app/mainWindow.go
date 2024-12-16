@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,12 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/prorok210/TestYourServer/core"
+)
+
+const (
+	MAX_LINES          int     = 20
+	REQ_DELAY_STEP     float64 = 1
+	TEST_DURATION_STEP float64 = 0.5
 )
 
 func CreateAppWindow() {
@@ -35,7 +43,7 @@ func CreateAppWindow() {
 		configRequestsButton *widget.Button
 		confWindowOpen       bool
 		activRequstsRows     []*RequestRow
-		activRequsts         []http.Request
+		activRequsts         []*http.Request
 	)
 
 	// Protocol selection
@@ -49,45 +57,121 @@ func CreateAppWindow() {
 	)
 
 	// Sliders for delay and duration
-	delaySlider := widget.NewSlider(1, 6000)
-	delaySlider.Step = 10
-	delaySlider.SetValue(float64(core.DEFAULT_DURATION.Milliseconds()))
+	delaySlider := widget.NewSlider(float64(core.MIN_REQ_DELAY.Milliseconds()), float64(core.MAX_REQ_DELAY.Milliseconds()))
+	delaySlider.Step = REQ_DELAY_STEP
+	delaySlider.SetValue(float64(core.DEFAULT_REQ_DELAY.Milliseconds()))
+	delayValStr := fmt.Sprintf("%v ms", core.DEFAULT_REQ_DELAY.Milliseconds())
 
-	durationSlider := widget.NewSlider(1, 60)
-	durationSlider.Step = 0.5
-	durationSlider.SetValue(float64(core.DEFAULT_DELAY.Milliseconds()))
+	durationSlider := widget.NewSlider(float64(core.MIN_DURATION.Minutes()), float64(core.MAX_DURATION.Minutes()))
+	durationSlider.Step = TEST_DURATION_STEP
+	durationSlider.SetValue(float64(core.DEFAULT_DURATION.Minutes()))
+	durationValStr := fmt.Sprintf("%v min", core.DEFAULT_DURATION.Minutes())
 
 	// Entry for delay and duration
 	delayEntry := widget.NewEntry()
-	delayEntry.SetText("200 ms")
+	delayEntry.SetText(delayValStr)
 	delayEntry.Resize(fyne.NewSize(100, 1000))
+
 	durationEntry := widget.NewEntry()
-	durationEntry.SetText("5 min")
+	durationEntry.SetText(durationValStr)
 	durationEntry.Resize(fyne.NewSize(100, 1000))
 
-	// Options for showing request
-	showRequest := widget.NewCheck("Show Request", nil)
-	showTime := widget.NewCheck("Show Time", nil)
-	showBody := widget.NewCheck("Show Body (only first 1000 bytes)", nil)
-	showHeaders := widget.NewCheck("Show Headers (only first 10 headers)", nil)
+	// OnChanged for sliders
+	delaySlider.OnChanged = func(f float64) {
+		delayValStr = fmt.Sprintf("%v ms", f)
+		delayEntry.SetText(delayValStr)
+	}
+	durationSlider.OnChanged = func(f float64) {
+		durationValStr = fmt.Sprintf("%v min", f)
+		durationEntry.SetText(durationValStr)
+	}
 
-	testCtx, testCancel := context.WithCancel(context.Background())
+	// OnChanged for entries
+	delayEntry.OnChanged = func(s string) {
+		s = strings.TrimSuffix(s, " ms")
+		matched, _ := regexp.MatchString(`^[0-9]+$`, s)
+
+		if matched {
+			val, _ := strconv.ParseFloat(s, 64)
+			if val > float64(core.MAX_REQ_DELAY.Milliseconds()) {
+				val = float64(core.MAX_REQ_DELAY.Milliseconds())
+			}
+			if val < float64(core.MIN_REQ_DELAY.Milliseconds()) {
+				val = float64(core.MIN_REQ_DELAY.Milliseconds())
+			}
+			delaySlider.SetValue(val)
+			delayValStr = fmt.Sprintf("%v ms", val)
+			delayEntry.SetText(delayValStr)
+		} else {
+			delayValStr = fmt.Sprintf("%v ms", core.MIN_REQ_DELAY.Milliseconds())
+			delayEntry.SetText(delayValStr)
+		}
+	}
+
+	durationEntry.OnChanged = func(s string) {
+		s = strings.TrimSuffix(s, " min")
+		matched, _ := regexp.MatchString(`^[0-9]+(\.[0-9]+)?`, s)
+
+		if matched {
+			val, _ := strconv.ParseFloat(s, 64)
+			if val < float64(core.MIN_DURATION.Minutes()) {
+				val = float64(core.MIN_DURATION.Minutes())
+			}
+			if val > float64(core.MAX_DURATION.Minutes()) {
+				val = float64(core.MAX_DURATION.Minutes())
+			}
+			durationSlider.SetValue(val)
+			durationValStr = fmt.Sprintf("%v min", val)
+			durationEntry.SetText(durationValStr)
+		} else {
+			durationValStr = fmt.Sprintf("%v min", 1)
+			durationEntry.SetText(durationValStr)
+		}
+	}
+
+	// Options for showing request
+	showRequest := widget.NewCheck("Show request", nil)
+	showTime := widget.NewCheck("Show response Time", nil)
+	showBody := widget.NewCheck("Show response Body (only first 1000 bytes)", nil)
+	showHeaders := widget.NewCheck("Show response Headers (only first 10 headers)", nil)
+
+	testCtx, testCancel := context.Background(), func() {}
+
 	testButton = widget.NewButton("Start testing", func() {
 		if confWindowOpen {
 			dialog.ShowInformation("Error", "You can't start testing while the settings window is open", w)
 			return
 		}
-		if testIsActiv {
+		startTestint := func() {
+			delaySlider.Disable()
+			durationSlider.Disable()
+			delayEntry.Disable()
+			durationEntry.Disable()
+
+			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
+		}
+		endTesting := func() {
+			delaySlider.Enable()
+			durationSlider.Enable()
+			delayEntry.Enable()
+			durationEntry.Enable()
+
 			testCancel()
-			testCtx, testCancel = context.WithCancel(context.Background())
+			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
 			testButton.SetText("Start testing")
 			testIsActiv = false
+		}
+
+		if testIsActiv {
+			endTesting()
 		} else {
+			startTestint()
+
 			reqSetting := &core.ReqSendingSettings{
 				Requests:            activRequsts,
 				Count_Workers:       10,
-				Delay:               100 * time.Millisecond,
-				Duration:            60 * time.Second,
+				Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
+				Duration:            time.Duration(durationSlider.Value) * time.Second,
 				RequestChanBufSize:  10,
 				ResponseChanBufSize: 10,
 			}
@@ -96,13 +180,7 @@ func CreateAppWindow() {
 			go core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
 
 			go func() {
-				defer func() {
-					testCancel()
-					testCtx, testCancel = context.WithCancel(context.Background())
-					testButton.SetText("Start testing")
-					testIsActiv = false
-				}()
-
+				defer endTesting()
 				var lastRequests []string
 				maxLines := 20
 
@@ -124,7 +202,10 @@ func CreateAppWindow() {
 					select {
 					case <-testCtx.Done():
 						return
-					case resp := <-outChan:
+					case resp, ok := <-outChan:
+						if !ok {
+							return
+						}
 						if resp != nil {
 							var responseText string
 							if resp.Err != nil {
@@ -278,4 +359,8 @@ func CreateAppWindow() {
 	w.Resize(fyne.NewSize(1200, 600))
 
 	w.ShowAndRun()
+}
+
+func endTesting() {
+
 }
