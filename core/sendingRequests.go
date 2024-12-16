@@ -1,9 +1,11 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"math/rand"
 	"net/http"
 	"time"
@@ -73,22 +75,36 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 	}()
 }
 
-func sendReqLoop(cl http.Client, req <-chan *http.Request, out chan<- *RequestInfo, ctx context.Context) {
+func sendReqLoop(cl http.Client, reqCh <-chan *http.Request, outCh chan<- *RequestInfo, ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case rq := <-req:
-			start := time.Now()
-			resp, err := cl.Do(rq)
+		case rq := <-reqCh:
+			reqCopy := new(http.Request)
+			*reqCopy = *rq
 
-			reqInfo := &RequestInfo{
+			if rq.Body != nil {
+				bodyBytes, err := io.ReadAll(rq.Body)
+				if err != nil {
+					outCh <- &RequestInfo{Err: err}
+					continue
+				}
+				rq.Body.Close()
+
+				rq.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				reqCopy.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+
+			start := time.Now()
+			resp, err := cl.Do(reqCopy)
+
+			outCh <- &RequestInfo{
 				time.Since(start),
 				resp,
 				rq,
 				err,
 			}
-			out <- reqInfo
 		}
 	}
 }

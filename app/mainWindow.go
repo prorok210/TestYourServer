@@ -34,7 +34,7 @@ func CreateAppWindow() {
 	var (
 		configRequestsButton *widget.Button
 		confWindowOpen       bool
-		activRequstsRows     []RequestRow
+		activRequstsRows     []*RequestRow
 		activRequsts         []http.Request
 	)
 
@@ -51,11 +51,11 @@ func CreateAppWindow() {
 	// Sliders for delay and duration
 	delaySlider := widget.NewSlider(1, 6000)
 	delaySlider.Step = 10
-	delaySlider.SetValue(200)
+	delaySlider.SetValue(float64(core.DEFAULT_DURATION.Milliseconds()))
 
 	durationSlider := widget.NewSlider(1, 60)
 	durationSlider.Step = 0.5
-	durationSlider.SetValue(5)
+	durationSlider.SetValue(float64(core.DEFAULT_DELAY.Milliseconds()))
 
 	// Entry for delay and duration
 	delayEntry := widget.NewEntry()
