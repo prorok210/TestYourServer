@@ -56,7 +56,7 @@ func CreateAppWindow() {
 		reportButton *widget.Button = widget.NewButton("Show report", func() {})
 	)
 
-	// Sliders for delay and duration
+	// Sliders for delay duration and workers
 	delaySlider := widget.NewSlider(float64(core.MIN_REQ_DELAY.Milliseconds()), float64(core.MAX_REQ_DELAY.Milliseconds()))
 	delaySlider.Step = REQ_DELAY_STEP
 	delaySlider.SetValue(float64(core.DEFAULT_REQ_DELAY.Milliseconds()))
@@ -67,7 +67,11 @@ func CreateAppWindow() {
 	durationSlider.SetValue(float64(core.DEFAULT_DURATION.Minutes()))
 	durationValStr := fmt.Sprintf("%v min", core.DEFAULT_DURATION.Minutes())
 
-	// Entry for delay and duration
+	workersSlider := widget.NewSlider(1, float64(core.MAX_CCOUNT_WORKERS))
+	workersSlider.Step = 1
+	workersSlider.SetValue(core.DEFAULT_COUNT_WORKERS)
+
+	// Entry for delay, duration and count of workers
 	delayEntry := widget.NewEntry()
 	delayEntry.SetText(delayValStr)
 	delayEntry.Resize(fyne.NewSize(100, 1000))
@@ -75,6 +79,10 @@ func CreateAppWindow() {
 	durationEntry := widget.NewEntry()
 	durationEntry.SetText(durationValStr)
 	durationEntry.Resize(fyne.NewSize(100, 1000))
+
+	workersEntry := widget.NewEntry()
+	workersEntry.SetText(fmt.Sprintf("%v", core.DEFAULT_COUNT_WORKERS))
+	workersEntry.Resize(fyne.NewSize(100, 1000))
 
 	// OnChanged for sliders
 	delaySlider.OnChanged = func(f float64) {
@@ -84,6 +92,9 @@ func CreateAppWindow() {
 	durationSlider.OnChanged = func(f float64) {
 		durationValStr = fmt.Sprintf("%v min", f)
 		durationEntry.SetText(durationValStr)
+	}
+	workersSlider.OnChanged = func(f float64) {
+		workersEntry.SetText(fmt.Sprintf("%v", f))
 	}
 
 	// OnChanged for entries
@@ -129,6 +140,24 @@ func CreateAppWindow() {
 		}
 	}
 
+	workersEntry.OnChanged = func(s string) {
+		matched, _ := regexp.MatchString(`^[0-9]+$`, s)
+
+		if matched {
+			val, _ := strconv.ParseFloat(s, 64)
+			if val > float64(core.MAX_CCOUNT_WORKERS) {
+				val = float64(core.MAX_CCOUNT_WORKERS)
+			}
+			if val < 1 {
+				val = 1
+			}
+			workersSlider.SetValue(val)
+			workersEntry.SetText(fmt.Sprintf("%v", val))
+		} else {
+			workersEntry.SetText(fmt.Sprintf("%v", 1))
+		}
+	}
+
 	// Options for showing request
 	showRequest := widget.NewCheck("Show request", nil)
 	showTime := widget.NewCheck("Show response Time", nil)
@@ -147,6 +176,8 @@ func CreateAppWindow() {
 			durationSlider.Disable()
 			delayEntry.Disable()
 			durationEntry.Disable()
+			workersEntry.Disable()
+			workersSlider.Disable()
 
 			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
 		}
@@ -155,6 +186,8 @@ func CreateAppWindow() {
 			durationSlider.Enable()
 			delayEntry.Enable()
 			durationEntry.Enable()
+			workersEntry.Enable()
+			workersSlider.Enable()
 
 			testCancel()
 			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
@@ -169,7 +202,7 @@ func CreateAppWindow() {
 
 			reqSetting := &core.ReqSendingSettings{
 				Requests:            activRequsts,
-				Count_Workers:       10,
+				Count_Workers:       uint(workersSlider.Value),
 				Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
 				Duration:            time.Duration(durationSlider.Value) * time.Second,
 				RequestChanBufSize:  10,
@@ -310,6 +343,11 @@ func CreateAppWindow() {
 		container.NewGridWrap(fyne.NewSize(300, 40), durationSlider),
 		container.NewGridWrap(fyne.NewSize(70, 40), durationEntry),
 	)
+	workersContainer := container.NewHBox(
+		widget.NewLabel("Count of workers"),
+		container.NewGridWrap(fyne.NewSize(300, 40), workersSlider),
+		container.NewGridWrap(fyne.NewSize(70, 40), workersEntry),
+	)
 
 	// Left panel of options
 	optionsContainer := container.NewVBox(
@@ -325,6 +363,7 @@ func CreateAppWindow() {
 		container.NewVBox(
 			delayContainer,
 			durationContainer,
+			workersContainer,
 		),
 		layout.NewSpacer(),
 		container.NewHBox(
