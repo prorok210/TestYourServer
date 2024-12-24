@@ -3,12 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -25,62 +23,80 @@ const (
 	TEST_DURATION_STEP float64 = 0.5
 )
 
-func CreateAppWindow() {
-	a := app.New()
-	w := a.NewWindow("Test Your Server")
-
-	infoReqsGrid := widget.NewTextGrid()
-	infoReqsGrid.SetText("There will be information about the requests here...")
+var (
+	// Main window
+	window fyne.Window
 
 	// Test button
-	var (
-		testButton  *widget.Button
-		testIsActiv bool
-	)
+	testButton  *widget.Button
+	testIsActiv bool
+
+	// Information about requests
+	infoReqsGrid *widget.TextGrid
 
 	// Configurate requests
-	var (
-		configRequestsButton *widget.Button
-		confWindowOpen       bool
-		activRequstsRows     []*RequestRow
-		activRequsts         []*http.Request
-	)
+	configRequestsButton *widget.Button
+	confWindowOpen       bool
+	activRequstsRows     []*RequestRow
+	activRequsts         []*http.Request
 
 	// Protocol selection
-	var (
-		protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
-	)
+	protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
 
 	// Report button
-	var (
-		reportButton *widget.Button = widget.NewButton("Show report", func() {})
-	)
+	reportButton *widget.Button = widget.NewButton("Show report", func() {})
 
-	// Sliders for delay duration and workers
-	delaySlider := widget.NewSlider(float64(core.MIN_REQ_DELAY.Milliseconds()), float64(core.MAX_REQ_DELAY.Milliseconds()))
+	// Sliders
+	delaySlider    *widget.Slider
+	durationSlider *widget.Slider
+	workersSlider  *widget.Slider
+
+	// Entry for delay, duration and count of workers
+	delayEntry    *widget.Entry
+	durationEntry *widget.Entry
+	workersEntry  *widget.Entry
+
+	// Options for showing request
+	showRequest *widget.Check
+	showTime    *widget.Check
+	showBody    *widget.Check
+	showHeaders *widget.Check
+
+	// Context for testing
+	testCtx    context.Context
+	testCancel context.CancelFunc
+)
+
+func CreateAppWindow() {
+	a := app.New()
+	window = a.NewWindow("Test Your Server")
+
+	infoReqsGrid = widget.NewTextGrid()
+	infoReqsGrid.SetText("There will be information about the requests here...")
+
+	delaySlider = widget.NewSlider(float64(core.MIN_REQ_DELAY.Milliseconds()), float64(core.MAX_REQ_DELAY.Milliseconds()))
 	delaySlider.Step = REQ_DELAY_STEP
 	delaySlider.SetValue(float64(core.DEFAULT_REQ_DELAY.Milliseconds()))
 	delayValStr := fmt.Sprintf("%v ms", core.DEFAULT_REQ_DELAY.Milliseconds())
 
-	durationSlider := widget.NewSlider(float64(core.MIN_DURATION.Minutes()), float64(core.MAX_DURATION.Minutes()))
+	durationSlider = widget.NewSlider(float64(core.MIN_DURATION.Minutes()), float64(core.MAX_DURATION.Minutes()))
 	durationSlider.Step = TEST_DURATION_STEP
 	durationSlider.SetValue(float64(core.DEFAULT_DURATION.Minutes()))
 	durationValStr := fmt.Sprintf("%v min", core.DEFAULT_DURATION.Minutes())
 
-	workersSlider := widget.NewSlider(1, float64(core.MAX_CCOUNT_WORKERS))
+	workersSlider = widget.NewSlider(1, float64(core.MAX_CCOUNT_WORKERS))
 	workersSlider.Step = 1
 	workersSlider.SetValue(core.DEFAULT_COUNT_WORKERS)
 
-	// Entry for delay, duration and count of workers
-	delayEntry := widget.NewEntry()
+	delayEntry = widget.NewEntry()
 	delayEntry.SetText(delayValStr)
 	delayEntry.Resize(fyne.NewSize(100, 1000))
 
-	durationEntry := widget.NewEntry()
+	durationEntry = widget.NewEntry()
 	durationEntry.SetText(durationValStr)
 	durationEntry.Resize(fyne.NewSize(100, 1000))
 
-	workersEntry := widget.NewEntry()
+	workersEntry = widget.NewEntry()
 	workersEntry.SetText(fmt.Sprintf("%v", core.DEFAULT_COUNT_WORKERS))
 	workersEntry.Resize(fyne.NewSize(100, 1000))
 
@@ -158,164 +174,18 @@ func CreateAppWindow() {
 		}
 	}
 
-	// Options for showing request
-	showRequest := widget.NewCheck("Show request", nil)
-	showTime := widget.NewCheck("Show response Time", nil)
-	showBody := widget.NewCheck("Show response Body (only first 1000 bytes)", nil)
-	showHeaders := widget.NewCheck("Show response Headers (only first 10 headers)", nil)
+	showRequest = widget.NewCheck("Show request", nil)
+	showTime = widget.NewCheck("Show response Time", nil)
+	showBody = widget.NewCheck("Show response Body (only first 1000 bytes)", nil)
+	showHeaders = widget.NewCheck("Show response Headers (only first 10 headers)", nil)
 
-	testCtx, testCancel := context.Background(), func() {}
+	testCtx, testCancel = context.Background(), func() {}
 
-	testButton = widget.NewButton("Start testing", func() {
-		if confWindowOpen {
-			dialog.ShowInformation("Error", "You can't start testing while the settings window is open", w)
-			return
-		}
-		startTestint := func() {
-			delaySlider.Disable()
-			durationSlider.Disable()
-			delayEntry.Disable()
-			durationEntry.Disable()
-			workersEntry.Disable()
-			workersSlider.Disable()
-
-			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
-		}
-		endTesting := func() {
-			delaySlider.Enable()
-			durationSlider.Enable()
-			delayEntry.Enable()
-			durationEntry.Enable()
-			workersEntry.Enable()
-			workersSlider.Enable()
-
-			testCancel()
-			testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
-			testButton.SetText("Start testing")
-			testIsActiv = false
-		}
-
-		if testIsActiv {
-			endTesting()
-		} else {
-			startTestint()
-
-			reqSetting := &core.ReqSendingSettings{
-				Requests:            activRequsts,
-				Count_Workers:       uint(workersSlider.Value),
-				Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
-				Duration:            time.Duration(durationSlider.Value) * time.Second,
-				RequestChanBufSize:  10,
-				ResponseChanBufSize: 10,
-			}
-
-			outChan := make(chan *core.RequestInfo, 10)
-			go core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
-
-			go func() {
-				defer endTesting()
-				var lastRequests []string
-				maxLines := 20
-
-				updateTicker := time.NewTicker(100 * time.Millisecond)
-				defer updateTicker.Stop()
-
-				var pendingUpdate bool
-
-				updateUI := func() {
-					if !pendingUpdate {
-						return
-					}
-					text := strings.Join(lastRequests, "\n")
-					infoReqsGrid.SetText(text)
-					pendingUpdate = false
-				}
-
-				for {
-					select {
-					case <-testCtx.Done():
-						return
-					case resp, ok := <-outChan:
-						if !ok {
-							return
-						}
-						if resp != nil {
-							var responseText string
-							if resp.Err != nil {
-								if resp.Err.Error() == "No requests" {
-									dialog.ShowInformation("Error", "No requests", w)
-									return
-								}
-								responseText += fmt.Sprintf("Error: %v\n", resp.Err)
-								continue
-							}
-
-							if showRequest.Checked {
-								responseText += fmt.Sprintf("Request: %v %v\n", resp.Request.Method, resp.Request.URL)
-							}
-							if showTime.Checked {
-								responseText += fmt.Sprintf("Time: %v\n", resp.Time)
-							}
-							responseText += fmt.Sprintf("Status: %s\n", resp.Response.Status)
-
-							if showBody.Checked {
-								if resp.Response.Body != nil {
-
-									body, err := io.ReadAll(resp.Response.Body)
-									if err == nil && len(body) > 0 {
-										if len(body) > 1000 {
-											responseText += fmt.Sprintf("ResponseBody: %s\n", string(body[:1000]))
-										} else {
-											responseText += fmt.Sprintf("ResponseBody: %s\n", string(body))
-										}
-									} else {
-										responseText += fmt.Sprintf("ResponseBody: Error reading body\n")
-									}
-								} else {
-									responseText += fmt.Sprintf("ResponseBody: nil\n")
-								}
-							}
-							if showHeaders.Checked {
-								if resp.Response.Header != nil {
-									responseText += "Headers:\n"
-									counter := 0
-									for k, v := range resp.Response.Header {
-										responseText += fmt.Sprintf("%s: %s\n", k, v)
-										counter++
-										if counter >= 10 {
-											responseText += fmt.Sprintf("...")
-											break
-										}
-									}
-								} else {
-									responseText += "Headers: nil\n"
-								}
-							}
-
-							lastRequests = append(lastRequests, responseText)
-							if len(lastRequests) > maxLines {
-								lastRequests = lastRequests[1:]
-							}
-							if resp.Response != nil {
-								if resp.Response.Body != nil {
-									resp.Response.Body.Close()
-								}
-							}
-							pendingUpdate = true
-						}
-					case <-updateTicker.C:
-						updateUI()
-					}
-				}
-			}()
-			testButton.SetText("Stop testing")
-			testIsActiv = true
-		}
-	})
+	testButton = widget.NewButton("Start testing", testButtonFunc)
 
 	configRequestsButton = widget.NewButton("Configurate requests", func() {
 		if testIsActiv {
-			dialog.ShowInformation("Error", "You can't configure requests while testing is in progress", w)
+			dialog.ShowInformation("Error", "You can't configure requests while testing is in progress", window)
 			return
 		}
 		if !confWindowOpen {
@@ -324,11 +194,11 @@ func CreateAppWindow() {
 		}
 	})
 
-	w.SetCloseIntercept(func() {
+	window.SetCloseIntercept(func() {
 		if confWindowOpen {
-			dialog.ShowInformation("Info", "Please close the settings window before exiting.", w)
+			dialog.ShowInformation("Info", "Please close the settings window before exiting.", window)
 		} else {
-			w.Close()
+			window.Close()
 		}
 	})
 
@@ -358,7 +228,6 @@ func CreateAppWindow() {
 			showHeaders,
 			showTime,
 		),
-
 		layout.NewSpacer(),
 		container.NewVBox(
 			delayContainer,
@@ -393,13 +262,9 @@ func CreateAppWindow() {
 	)
 	content.SetOffset(0.95)
 
-	w.SetContent(content)
+	window.SetContent(content)
 
-	w.Resize(fyne.NewSize(1200, 600))
+	window.Resize(fyne.NewSize(1200, 600))
 
-	w.ShowAndRun()
-}
-
-func endTesting() {
-
+	window.ShowAndRun()
 }
