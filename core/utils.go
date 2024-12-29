@@ -42,3 +42,10 @@ func setReqSettings(reqSettings *ReqSendingSettings) *ReqSendingSettings {
 	}
 	return reqSettings
 }
+
+func TruncateString(input string, maxLength int) string {
+	if len(input) <= maxLength {
+		return input
+	}
+	return input[:maxLength] + "..."
+}
