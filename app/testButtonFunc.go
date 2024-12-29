@@ -11,7 +11,9 @@ import (
 	"github.com/prorok210/TestYourServer/core"
 )
 
-func startTestint() {
+const OUT_REQ_CHAN_BUF = 100
+
+func startTesting() {
 	delaySlider.Disable()
 	durationSlider.Disable()
 	delayEntry.Disable()
@@ -45,21 +47,25 @@ func testButtonFunc() {
 	if testIsActiv {
 		endTesting()
 	} else {
-		startTestint()
+		startTesting()
 		reqSetting := &core.ReqSendingSettings{
 			Requests:            activRequsts,
-			Count_Workers:       uint(workersSlider.Value),
+			Count_Workers:       int(workersSlider.Value),
 			Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
 			Duration:            time.Duration(durationSlider.Value) * time.Second,
 			RequestChanBufSize:  10,
 			ResponseChanBufSize: 10,
 		}
 
-		outChan := make(chan *core.RequestInfo, 10)
-		go core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
+		// reportChan := make(chan []*core.RequestReport)
+		go func() {
+			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+		}()
 
 		go func() {
 			defer endTesting()
+
 			var lastRequests []string
 			maxLines := 20
 

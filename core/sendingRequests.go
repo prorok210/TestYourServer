@@ -24,6 +24,8 @@ const (
 	DEFAULT_REQUEST_CHAN_BUF_SIZE  = 10
 	MAX_CHAN_BUF_SIZE              = 100
 	DEFAULT_RESPONSE_CHAN_BUF_SIZE = 10
+	REPORT_IN_CHAN_SIZE            = 100
+	REQUEST_TIMEOUT                = 10 * time.Second
 )
 
 type RequestInfo struct {
@@ -35,11 +37,11 @@ type RequestInfo struct {
 
 type ReqSendingSettings struct {
 	Requests            []*http.Request
-	Count_Workers       uint
+	Count_Workers       int
 	Delay               time.Duration
 	Duration            time.Duration
-	RequestChanBufSize  uint
-	ResponseChanBufSize uint
+	RequestChanBufSize  int
+	ResponseChanBufSize int
 }
 
 type CachedRequest struct {
@@ -47,11 +49,11 @@ type CachedRequest struct {
 	cachedBody []byte
 }
 
-func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, ctx context.Context) {
+func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, ctx context.Context) []*RequestReport {
 	reqSettings = setReqSettings(reqSettings)
 	if reqSettings.Requests == nil {
 		outCh <- &RequestInfo{Err: errors.New("No requests")}
-		return
+		return nil
 	}
 
 	cachedRequests := make([]*CachedRequest, len(reqSettings.Requests))
@@ -65,6 +67,17 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 		cachedRequests[i] = cachedReq
 	}
 
+	var reqWg sync.WaitGroup
+	reportOutCh := make(chan []*RequestReport, 1)
+	reportInCh := make(chan *RequestInfo, REPORT_IN_CHAN_SIZE)
+
+	reqWg.Add(1)
+	go func() {
+		defer reqWg.Done()
+		reportOutCh <- reportPool(ctx, reportInCh)
+		close(reportOutCh)
+	}()
+
 	var wg sync.WaitGroup
 	for i := 0; i < int(reqSettings.Count_Workers); i++ {
 		wg.Add(1)
@@ -75,7 +88,7 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 				MaxIdleConns:        MAX_CCOUNT_WORKERS,
 				MaxIdleConnsPerHost: MAX_CCOUNT_WORKERS,
 			}
-			cl := http.Client{Transport: customTransport}
+			cl := http.Client{Transport: customTransport, Timeout: REQUEST_TIMEOUT}
 
 			ticker := time.NewTicker(reqSettings.Delay)
 			defer ticker.Stop()
@@ -98,17 +111,25 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 					start := time.Now()
 					resp, err := cl.Do(reqCopy)
 
-					outCh <- &RequestInfo{
+					reqInf := &RequestInfo{
 						Time:     time.Since(start),
 						Response: resp,
 						Request:  cached.Request,
 						Err:      err,
 					}
+
+					outCh <- reqInf
+					reportInCh <- reqInf
 				}
 			}
 		}()
 	}
 
-	<-ctx.Done()
 	wg.Wait()
+	close(outCh)
+
+	reqWg.Wait()
+	close(reportInCh)
+
+	return <-reportOutCh
 }

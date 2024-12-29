@@ -44,7 +44,10 @@ var (
 	protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
 
 	// Report button
-	reportButton *widget.Button = widget.NewButton("Show report", func() {})
+	reportButton *widget.Button
+
+	// Report info
+	currentReports []*core.RequestReport
 
 	// Sliders
 	delaySlider    *widget.Slider
@@ -182,6 +185,8 @@ func CreateAppWindow() {
 	testCtx, testCancel = context.Background(), func() {}
 
 	testButton = widget.NewButton("Start testing", testButtonFunc)
+
+	reportButton = widget.NewButton("Show report", showReport)
 
 	configRequestsButton = widget.NewButton("Configurate requests", func() {
 		if testIsActiv {
