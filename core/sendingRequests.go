@@ -20,7 +20,7 @@ const (
 	MIN_DURATION                   = 1 * time.Minute
 	MAX_DURATION                   = 60 * time.Minute
 	DEFAULT_COUNT_WORKERS          = 10
-	MAX_CCOUNT_WORKERS             = 100
+	MAX_COUNT_WORKERS              = 100
 	DEFAULT_REQUEST_CHAN_BUF_SIZE  = 10
 	MAX_CHAN_BUF_SIZE              = 100
 	DEFAULT_RESPONSE_CHAN_BUF_SIZE = 10
@@ -85,8 +85,8 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 			defer wg.Done()
 			customTransport := &http.Transport{
 				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-				MaxIdleConns:        MAX_CCOUNT_WORKERS,
-				MaxIdleConnsPerHost: MAX_CCOUNT_WORKERS,
+				MaxIdleConns:        MAX_COUNT_WORKERS,
+				MaxIdleConnsPerHost: MAX_COUNT_WORKERS,
 			}
 			cl := http.Client{Transport: customTransport, Timeout: REQUEST_TIMEOUT}
 

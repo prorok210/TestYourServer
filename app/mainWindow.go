@@ -87,7 +87,7 @@ func CreateAppWindow() {
 	durationSlider.SetValue(float64(core.DEFAULT_DURATION.Minutes()))
 	durationValStr := fmt.Sprintf("%v min", core.DEFAULT_DURATION.Minutes())
 
-	workersSlider = widget.NewSlider(1, float64(core.MAX_CCOUNT_WORKERS))
+	workersSlider = widget.NewSlider(1, float64(core.MAX_COUNT_WORKERS))
 	workersSlider.Step = 1
 	workersSlider.SetValue(core.DEFAULT_COUNT_WORKERS)
 
@@ -164,8 +164,8 @@ func CreateAppWindow() {
 
 		if matched {
 			val, _ := strconv.ParseFloat(s, 64)
-			if val > float64(core.MAX_CCOUNT_WORKERS) {
-				val = float64(core.MAX_CCOUNT_WORKERS)
+			if val > float64(core.MAX_COUNT_WORKERS) {
+				val = float64(core.MAX_COUNT_WORKERS)
 			}
 			if val < 1 {
 				val = 1
@@ -219,7 +219,7 @@ func CreateAppWindow() {
 		container.NewGridWrap(fyne.NewSize(70, 40), durationEntry),
 	)
 	workersContainer := container.NewHBox(
-		widget.NewLabel("Count of workers"),
+		widget.NewLabel("Count of clients"),
 		container.NewGridWrap(fyne.NewSize(300, 40), workersSlider),
 		container.NewGridWrap(fyne.NewSize(70, 40), workersEntry),
 	)

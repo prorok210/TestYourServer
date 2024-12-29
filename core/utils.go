@@ -1,16 +1,21 @@
 package core
 
 import (
+	"errors"
 	"net/url"
 	"time"
 )
 
-func MustParseURL(rawURL string) *url.URL {
-	url, err := url.ParseRequestURI(rawURL)
+func MustParseURL(rawURL string) (*url.URL, error) {
+	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return nil
+		return nil, errors.New("invalid URL")
 	}
-	return url
+
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, errors.New("URL must have a valid scheme and host")
+	}
+	return parsedURL, nil
 }
 
 func setReqSettings(reqSettings *ReqSendingSettings) *ReqSendingSettings {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -158,9 +159,13 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 		requestsContainer.Add(createRequestRow())
 	})
 	applyButton := widget.NewButton("Apply", func() {
+		var err error
+
 		defer func() {
 			*winOpen = false
-			confWindow.Close()
+			if err == nil {
+				confWindow.Close()
+			}
 		}()
 
 		*reqsRows = nil
@@ -170,7 +175,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 			if row, ok := obj.(*fyne.Container); ok {
 				hSplit, ok := row.Objects[0].(*container.Split)
 				if !ok {
-					continue // Если это не Split, пропускаем
+					continue
 				}
 				split1, ok := hSplit.Leading.(*container.Split)
 				if !ok {
@@ -203,6 +208,13 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 				}
 
 				if methodSelect.Selected != "" && urlEntry.Text != "" {
+					var url *url.URL
+					url, err = core.MustParseURL(urlEntry.Text)
+					if err != nil || url == nil {
+						dialog.ShowInformation("Error", "Invalid URL format", confWindow)
+						return
+					}
+
 					*reqsRows = append(*reqsRows, &RequestRow{
 						method:    methodSelect,
 						url:       urlEntry,
@@ -212,7 +224,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 					})
 					*reqs = append(*reqs, &http.Request{
 						Method: methodSelect.Selected,
-						URL:    core.MustParseURL(urlEntry.Text),
+						URL:    url,
 						Body:   io.NopCloser(strings.NewReader(bodyEntry.Text)),
 					})
 				}
