@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,10 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/prorok210/TestYourServer/core"
+)
+
+const (
+	MAX_COUNT_REQS = 100
 )
 
 type RequestRow struct {
@@ -146,8 +151,8 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 	}
 
 	addButton := widget.NewButton("Add Request", func() {
-		if len(requestsContainer.Objects) >= 11 {
-			dialog.ShowInformation("Error", "You can add a maximum of 10 requests", confWindow)
+		if len(requestsContainer.Objects) >= MAX_COUNT_REQS {
+			dialog.ShowInformation("Error", fmt.Sprintf("You can add a maximum of %d requests", MAX_COUNT_REQS), confWindow)
 			return
 		}
 		requestsContainer.Add(createRequestRow())

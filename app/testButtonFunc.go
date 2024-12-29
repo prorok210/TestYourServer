@@ -58,7 +58,7 @@ func testButtonFunc() {
 		}
 
 		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
-		// reportChan := make(chan []*core.RequestReport)
+
 		go func() {
 			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
 		}()
