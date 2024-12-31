@@ -158,6 +158,12 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 		}
 		requestsContainer.Add(createRequestRow())
 	})
+
+	clearButton := widget.NewButton("Clear", func() {
+		requestsContainer.Objects = nil
+		requestsContainer.Add(createRequestRow())
+	})
+
 	applyButton := widget.NewButton("Apply", func() {
 		var err error
 
@@ -237,7 +243,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 		confWindow.Close()
 	})
 
-	content := container.NewBorder(nil, container.NewAdaptiveGrid(2, addButton, applyButton), nil, nil, requestsContainer)
+	content := container.NewBorder(nil, container.NewVBox(container.NewAdaptiveGrid(2, clearButton, addButton), applyButton), nil, nil, requestsContainer)
 
 	confWindow.SetContent(content)
 	confWindow.Resize(fyne.NewSize(800, 600))
