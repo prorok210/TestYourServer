@@ -33,10 +33,12 @@ func startTesting() {
 
 	testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
 	displayCtx, displayCtxCancel = context.WithCancel(context.Background())
+	countReqs.Store(0)
+	countFailedReqs.Store(0)
+	go startTimer(time.Duration(durationSlider.Value) * time.Minute)
 }
 
 func endTesting() {
-	fmt.Println("End testing")
 	testCancel()
 	<-displayCtx.Done()
 
@@ -132,11 +134,14 @@ func testButtonFunc() {
 					}
 					batchText.Reset()
 
+					countReqs.Add(1)
+
 					if resp.Err != nil {
 						if resp.Err.Error() == "No requests" {
 							dialog.ShowInformation("Error", "No requests", window)
 							return
 						}
+						countFailedReqs.Add(1)
 						batchText.WriteString(fmt.Sprintf("Error: %v\n", resp.Err))
 						continue
 					}
@@ -196,5 +201,33 @@ func testButtonFunc() {
 		}()
 		testButton.SetText("Stop testing")
 		testIsActiv = true
+	}
+}
+
+func startTimer(maxDuration time.Duration) {
+	elapsed := time.Duration(0)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	var remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds int
+
+	for {
+		select {
+		case <-ticker.C:
+			elapsed += time.Second
+			remaining := maxDuration - elapsed
+			if remaining <= 0 {
+				return
+			}
+			remainingMinutes = int(remaining.Minutes())
+			remainingSeconds = int(remaining.Seconds()) % 60
+			elapsedMinutes = int(elapsed.Minutes())
+			elapsedSeconds = int(elapsed.Seconds()) % 60
+			StatsLabel.SetText(fmt.Sprintf("Time left: %02d:%02d\nTime elapsed: %02d:%02d\nRequests sent: %d\nRequests failed: %d",
+				remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds, countReqs.Load(), countFailedReqs.Load()))
+		case <-displayCtx.Done():
+			StatsLabel.SetText(fmt.Sprintf("Time left: %02d:%02d\nTime elapsed: %02d:%02d\nRequests sent: %d\nRequests failed: %d",
+				remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds, countReqs.Load(), countFailedReqs.Load()))
+			return
+		}
 	}
 }

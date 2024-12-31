@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -84,8 +83,6 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 		close(reportOutCh)
 	}()
 
-	var countReqs atomic.Int64
-
 	for i := 0; i < int(reqSettings.Count_Workers); i++ {
 		sendingReqsWg.Add(1)
 		go func() {
@@ -130,8 +127,6 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 						Err:      err,
 					}
 
-					countReqs.Add(1)
-
 					select {
 					case outCh <- reqInf:
 					default:
@@ -153,8 +148,6 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 	close(reportInCh)
 	close(outCh)
 	reportWg.Wait()
-
-	fmt.Println("Numbers of requests: ", countReqs.Load())
 
 	return <-reportOutCh
 }

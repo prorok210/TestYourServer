@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -35,6 +36,9 @@ var (
 	// Information about requests
 	infoReqsGrid *widget.TextGrid
 
+	// Stats label
+	StatsLabel *widget.Label
+
 	// Configurate requests
 	configRequestsButton *widget.Button
 	confWindowOpen       bool
@@ -49,7 +53,9 @@ var (
 	reportWindowOpen bool
 
 	// Report info
-	currentReports []*core.RequestReport
+	currentReports  []*core.RequestReport
+	countReqs       atomic.Int64
+	countFailedReqs atomic.Int64
 
 	// Sliders
 	delaySlider    *widget.Slider
@@ -106,6 +112,9 @@ func CreateAppWindow() {
 	workersEntry = widget.NewEntry()
 	workersEntry.SetText(fmt.Sprintf("%v", core.DEFAULT_COUNT_WORKERS))
 	workersEntry.Resize(fyne.NewSize(100, 1000))
+
+	// Stats label
+	StatsLabel = widget.NewLabel("Time left: 00:00\nTime elapsed: 00:00\nRequests sent: 0\nRequests failed: 0")
 
 	// OnChanged for sliders
 	var timer *time.Timer
@@ -244,31 +253,31 @@ func CreateAppWindow() {
 
 	// Wrap output in scroll container
 	scrollOutput := container.NewScroll(infoReqsGrid)
-	scrollOutput.SetMinSize(fyne.NewSize(600, 400))
 
 	// Create left panel with fixed width
 	leftPanel := container.NewVBox(
+		widget.NewCard("Stats", "", container.NewVBox(
+			StatsLabel,
+		)),
 		widget.NewCard("Testing options", "", container.NewVBox(
 			showRequest,
 			showBody,
 			showHeaders,
 			showTime,
 		)),
-		layout.NewSpacer(),
 		widget.NewCard("Settings", "", container.NewVBox(
 			delayContainer,
 			durationContainer,
 			workersContainer,
+			container.NewHBox(
+				layout.NewSpacer(),
+				protocolButton,
+				layout.NewSpacer(),
+				configRequestsButton,
+				layout.NewSpacer(),
+			),
 		)),
-		layout.NewSpacer(),
-		container.NewHBox(
-			protocolButton,
-			layout.NewSpacer(),
-			configRequestsButton,
-		),
-		layout.NewSpacer(),
 	)
-	leftPanel.Resize(fyne.NewSize(300, -1))
 
 	// Bottom panel with fixed height
 	bottomPanel := container.NewHBox(

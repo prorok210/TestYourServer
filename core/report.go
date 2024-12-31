@@ -11,13 +11,14 @@ const (
 )
 
 type RequestReport struct {
-	Url     string
-	AvgTime time.Duration
-	MinTime time.Duration
-	MaxTime time.Duration
-	Count   int
-	ReqCods map[int]int
-	Errors  map[string]int
+	Url      string
+	AvgTime  time.Duration
+	MinTime  time.Duration
+	MaxTime  time.Duration
+	Count    int
+	ReqCods  map[int]int
+	Errors   map[string]int
+	TestTime time.Time
 }
 
 func reportPool(in <-chan *RequestInfo) []*RequestReport {
@@ -36,6 +37,7 @@ func reportPool(in <-chan *RequestInfo) []*RequestReport {
 				close(v.ch)
 			}
 			calcRepWg.Wait()
+
 			return result
 		}
 
