@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,7 +52,7 @@ type CachedRequest struct {
 	cachedBody []byte
 }
 
-func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, ctx context.Context) []*RequestReport {
+func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSendingSettings, testCtx context.Context) []*RequestReport {
 	reqSettings = setReqSettings(reqSettings)
 	if reqSettings.Requests == nil {
 		outCh <- &RequestInfo{Err: errors.New("No requests")}
@@ -67,22 +70,26 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 		cachedRequests[i] = cachedReq
 	}
 
-	var reqWg sync.WaitGroup
+	var reportWg sync.WaitGroup
+
+	var sendingReqsWg sync.WaitGroup
+
 	reportOutCh := make(chan []*RequestReport, 1)
 	reportInCh := make(chan *RequestInfo, REPORT_IN_CHAN_SIZE)
 
-	reqWg.Add(1)
+	reportWg.Add(1)
 	go func() {
-		defer reqWg.Done()
-		reportOutCh <- reportPool(ctx, reportInCh)
+		defer reportWg.Done()
+		reportOutCh <- reportPool(reportInCh)
 		close(reportOutCh)
 	}()
 
-	var wg sync.WaitGroup
+	var countReqs atomic.Int64
+
 	for i := 0; i < int(reqSettings.Count_Workers); i++ {
-		wg.Add(1)
+		sendingReqsWg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer sendingReqsWg.Done()
 			customTransport := &http.Transport{
 				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 				MaxIdleConns:        MAX_COUNT_WORKERS,
@@ -97,19 +104,24 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 
 			for {
 				select {
-				case <-ctx.Done():
+				case <-testCtx.Done():
 					return
 				case <-ticker.C:
 					index := r.Intn(len(cachedRequests))
 					cached := cachedRequests[index]
 
-					reqCopy := cached.Request.Clone(ctx)
+					reqCopy := cached.Request.Clone(testCtx)
 					if cached.cachedBody != nil {
 						reqCopy.Body = io.NopCloser(bytes.NewReader(cached.cachedBody))
 					}
 
 					start := time.Now()
 					resp, err := cl.Do(reqCopy)
+					if err != nil {
+						if strings.Contains(err.Error(), "context canceled") {
+							return
+						}
+					}
 
 					reqInf := &RequestInfo{
 						Time:     time.Since(start),
@@ -118,18 +130,31 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 						Err:      err,
 					}
 
-					outCh <- reqInf
-					reportInCh <- reqInf
+					countReqs.Add(1)
+
+					select {
+					case outCh <- reqInf:
+					default:
+						fmt.Println("outCh is full, dropping request")
+					}
+
+					select {
+					case reportInCh <- reqInf:
+					default:
+						fmt.Println("reportInCh is full, dropping request")
+					}
+
 				}
 			}
 		}()
 	}
 
-	wg.Wait()
-	close(outCh)
-
-	reqWg.Wait()
+	sendingReqsWg.Wait()
 	close(reportInCh)
+	close(outCh)
+	reportWg.Wait()
+
+	fmt.Println("Numbers of requests: ", countReqs.Load())
 
 	return <-reportOutCh
 }

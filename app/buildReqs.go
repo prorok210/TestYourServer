@@ -242,9 +242,5 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 	confWindow.SetContent(content)
 	confWindow.Resize(fyne.NewSize(800, 600))
 
-	confWindow.SetOnClosed(func() {
-
-	})
-
 	confWindow.Show()
 }

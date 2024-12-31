@@ -5,27 +5,28 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/prorok210/TestYourServer/core"
 )
 
 const (
 	MAX_URL_LEN = 100
+	MAX_ROW_LEN = 100
 )
 
 func showReport() {
-	if len(currentReports) == 0 {
-		dialog.ShowInformation("Error", "Before viewing the report, you must conduct a test", window)
-		return
-	}
-
-	if testIsActiv {
-		dialog.ShowInformation("Error", "You can't open a report during a test", window)
+	if reportWindowOpen {
 		return
 	}
 
 	reportWindow := fyne.CurrentApp().NewWindow("Report")
+
+	reportWindowOpen = true
+
+	reportWindow.SetOnClosed(func() {
+		reportWindowOpen = false
+		reportWindow.Close()
+	})
 
 	sections := []fyne.CanvasObject{}
 
@@ -57,7 +58,8 @@ func showReport() {
 			errorsContent = "No errors.\n"
 		} else {
 			for err, count := range reqsRep.Errors {
-				errorsContent += fmt.Sprintf("  - %s: %d\n", err, count)
+				wrappedError := core.WrapText(fmt.Sprintf("  - %s: %d", err, count), 100)
+				errorsContent += wrappedError + "\n"
 			}
 		}
 		errorsContentLabel := widget.NewRichTextFromMarkdown(errorsContent)
@@ -74,6 +76,9 @@ func showReport() {
 	}
 
 	reportContent := container.NewVScroll(container.NewVBox(sections...))
+	if len(currentReports) == 0 {
+		reportContent = container.NewVScroll(widget.NewLabel("No reports."))
+	}
 
 	reportWindow.SetContent(reportContent)
 	reportWindow.Resize(fyne.NewSize(800, 600))

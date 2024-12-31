@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -18,9 +19,9 @@ import (
 )
 
 const (
-	MAX_LINES          int     = 20
-	REQ_DELAY_STEP     float64 = 1
-	TEST_DURATION_STEP float64 = 0.5
+	REQ_DELAY_STEP             = 1.0
+	TEST_DURATION_STEP         = 0.5
+	UPDATE_SLIDERS_ENTRY_DELAY = 10 * time.Millisecond
 )
 
 var (
@@ -44,7 +45,8 @@ var (
 	protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
 
 	// Report button
-	reportButton *widget.Button
+	reportButton     *widget.Button
+	reportWindowOpen bool
 
 	// Report info
 	currentReports []*core.RequestReport
@@ -66,8 +68,10 @@ var (
 	showHeaders *widget.Check
 
 	// Context for testing
-	testCtx    context.Context
-	testCancel context.CancelFunc
+	testCtx          context.Context
+	testCancel       context.CancelFunc
+	displayCtx       context.Context
+	displayCtxCancel context.CancelFunc
 )
 
 func CreateAppWindow() {
@@ -104,16 +108,29 @@ func CreateAppWindow() {
 	workersEntry.Resize(fyne.NewSize(100, 1000))
 
 	// OnChanged for sliders
+	var timer *time.Timer
+
+	updateUI := func(val string, updateFunc func(string)) {
+		if timer != nil {
+			timer.Stop()
+		}
+
+		timer = time.AfterFunc(UPDATE_SLIDERS_ENTRY_DELAY, func() {
+			updateFunc(val)
+		})
+	}
+
 	delaySlider.OnChanged = func(f float64) {
 		delayValStr = fmt.Sprintf("%v ms", f)
-		delayEntry.SetText(delayValStr)
+		updateUI(delayValStr, delayEntry.SetText)
 	}
 	durationSlider.OnChanged = func(f float64) {
 		durationValStr = fmt.Sprintf("%v min", f)
-		durationEntry.SetText(durationValStr)
+		updateUI(durationValStr, durationEntry.SetText)
 	}
 	workersSlider.OnChanged = func(f float64) {
-		workersEntry.SetText(fmt.Sprintf("%v", f))
+		workersValStr := fmt.Sprintf("%d", int(f))
+		updateUI(workersValStr, workersEntry.SetText)
 	}
 
 	// OnChanged for entries
@@ -183,6 +200,7 @@ func CreateAppWindow() {
 	showHeaders = widget.NewCheck("Show response Headers (only first 10 headers)", nil)
 
 	testCtx, testCancel = context.Background(), func() {}
+	displayCtx, displayCtxCancel = context.Background(), func() {}
 
 	testButton = widget.NewButton("Start testing", testButtonFunc)
 
@@ -224,52 +242,52 @@ func CreateAppWindow() {
 		container.NewGridWrap(fyne.NewSize(70, 40), workersEntry),
 	)
 
-	// Left panel of options
-	optionsContainer := container.NewVBox(
-		container.NewVBox(
-			widget.NewLabel("Testing options"),
+	// Wrap output in scroll container
+	scrollOutput := container.NewScroll(infoReqsGrid)
+	scrollOutput.SetMinSize(fyne.NewSize(600, 400))
+
+	// Create left panel with fixed width
+	leftPanel := container.NewVBox(
+		widget.NewCard("Testing options", "", container.NewVBox(
 			showRequest,
 			showBody,
 			showHeaders,
 			showTime,
-		),
+		)),
 		layout.NewSpacer(),
-		container.NewVBox(
+		widget.NewCard("Settings", "", container.NewVBox(
 			delayContainer,
 			durationContainer,
 			workersContainer,
-		),
+		)),
 		layout.NewSpacer(),
 		container.NewHBox(
-			container.NewGridWrap(fyne.NewSize(35, 40), container.New(layout.NewHBoxLayout())),
-			container.NewGridWrap(fyne.NewSize(150, 40), protocolButton),
-			container.NewGridWrap(fyne.NewSize(100, 40), container.New(layout.NewHBoxLayout())),
-			container.NewGridWrap(fyne.NewSize(150, 40), configRequestsButton),
+			protocolButton,
+			layout.NewSpacer(),
+			configRequestsButton,
 		),
 		layout.NewSpacer(),
 	)
+	leftPanel.Resize(fyne.NewSize(300, -1))
 
-	// Scroll container
-	scrollContainer := container.NewScroll(infoReqsGrid)
-
-	top := container.NewHSplit(optionsContainer, scrollContainer)
-	top.SetOffset(0.3)
-
-	content := container.NewVSplit(
-		top,
-		container.NewAdaptiveGrid(5,
-			layout.NewSpacer(),
-			container.NewGridWrap(fyne.NewSize(150, 40), reportButton),
-			layout.NewSpacer(),
-			container.NewGridWrap(fyne.NewSize(150, 40), testButton),
-			layout.NewSpacer(),
-		),
+	// Bottom panel with fixed height
+	bottomPanel := container.NewHBox(
+		layout.NewSpacer(),
+		reportButton,
+		layout.NewSpacer(),
+		testButton,
+		layout.NewSpacer(),
 	)
-	content.SetOffset(0.95)
 
-	window.SetContent(content)
+	mainContainer := container.NewBorder(
+		nil,
+		bottomPanel,
+		leftPanel,
+		nil,
+		scrollOutput,
+	)
 
+	window.SetContent(mainContainer)
 	window.Resize(fyne.NewSize(1200, 600))
-
 	window.ShowAndRun()
 }

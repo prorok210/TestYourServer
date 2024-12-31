@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -53,4 +54,15 @@ func TruncateString(input string, maxLength int) string {
 		return input
 	}
 	return input[:maxLength] + "..."
+}
+
+func WrapText(text string, limit int) string {
+	var result strings.Builder
+	for len(text) > limit {
+		result.WriteString(text[:limit])
+		result.WriteString("\n")
+		text = text[limit:]
+	}
+	result.WriteString(text)
+	return result.String()
 }

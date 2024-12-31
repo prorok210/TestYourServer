@@ -5,13 +5,20 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2/dialog"
 	"github.com/prorok210/TestYourServer/core"
 )
 
-const OUT_REQ_CHAN_BUF = 100
+const (
+	OUT_REQ_CHAN_BUF       = 100
+	UPDATE_TEXT_GRID_DALEY = 200 * time.Millisecond
+	MAX_LINES              = 20
+	MAX_ENTRY_LEN          = 2000
+	MAX_HEADERS            = 10
+)
 
 func startTesting() {
 	delaySlider.Disable()
@@ -20,32 +27,48 @@ func startTesting() {
 	durationEntry.Disable()
 	workersEntry.Disable()
 	workersSlider.Disable()
+	reportButton.Disable()
+	configRequestsButton.Disable()
+	// protocolButton.Disable()
 
 	testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
+	displayCtx, displayCtxCancel = context.WithCancel(context.Background())
 }
 
 func endTesting() {
+	fmt.Println("End testing")
+	testCancel()
+	<-displayCtx.Done()
+
+	testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
+	displayCtx, displayCtxCancel = context.WithCancel(context.Background())
+	testButton.SetText("Start testing")
+	testIsActiv = false
+
 	delaySlider.Enable()
 	durationSlider.Enable()
 	delayEntry.Enable()
 	durationEntry.Enable()
 	workersEntry.Enable()
 	workersSlider.Enable()
-	testCancel()
-
-	testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
-	testButton.SetText("Start testing")
-	testIsActiv = false
+	reportButton.Enable()
+	configRequestsButton.Enable()
+	// protocolButton.Enable()
 }
 
 func testButtonFunc() {
 	if confWindowOpen {
-		dialog.ShowInformation("Error", "You can't start testing while the settings window is open", window)
+		dialog.ShowInformation("Error", "Can't start testing while the settings window is open", window)
+		return
+	}
+
+	if len(activRequsts) == 0 {
+		dialog.ShowInformation("Error", "Configure requests before starting the test", window)
 		return
 	}
 
 	if testIsActiv {
-		endTesting()
+		testCancel()
 	} else {
 		startTesting()
 		reqSetting := &core.ReqSendingSettings{
@@ -53,108 +76,119 @@ func testButtonFunc() {
 			Count_Workers:       int(workersSlider.Value),
 			Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
 			Duration:            time.Duration(durationSlider.Value) * time.Second,
-			RequestChanBufSize:  10,
-			ResponseChanBufSize: 10,
+			RequestChanBufSize:  100,
+			ResponseChanBufSize: 100,
 		}
 
 		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
 
 		go func() {
 			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+			displayCtxCancel()
 		}()
+
+		ringBuffer := make([]string, MAX_LINES)
+		currentIndex := 0
 
 		go func() {
 			defer endTesting()
 
-			var lastRequests []string
-			maxLines := 20
-
-			updateTicker := time.NewTicker(100 * time.Millisecond)
+			updateTicker := time.NewTicker(UPDATE_TEXT_GRID_DALEY)
 			defer updateTicker.Stop()
 
+			var mu sync.Mutex
 			var pendingUpdate bool
+			var batchText strings.Builder
 
 			updateUI := func() {
 				if !pendingUpdate {
 					return
 				}
-				text := strings.Join(lastRequests, "\n")
-				infoReqsGrid.SetText(text)
+				mu.Lock()
+				var displayText strings.Builder
+				for i := 0; i < MAX_LINES; i++ {
+					idx := (currentIndex - i - 1 + MAX_LINES) % MAX_LINES
+					if ringBuffer[idx] != "" {
+						displayText.WriteString(ringBuffer[idx])
+						displayText.WriteString("\n")
+					}
+				}
+				text := displayText.String()
+				mu.Unlock()
+
+				if text != "" {
+					infoReqsGrid.SetText(text)
+				}
 				pendingUpdate = false
 			}
 
 			for {
 				select {
-				case <-testCtx.Done():
+				case <-displayCtx.Done():
 					return
 				case resp, ok := <-outChan:
 					if !ok {
 						return
 					}
-					if resp != nil {
-						var responseText string
-						if resp.Err != nil {
-							if resp.Err.Error() == "No requests" {
-								dialog.ShowInformation("Error", "No requests", window)
-								return
-							}
-							responseText += fmt.Sprintf("Error: %v\n", resp.Err)
-							continue
-						}
+					batchText.Reset()
 
-						if showRequest.Checked {
-							responseText += fmt.Sprintf("Request: %v %v\n", resp.Request.Method, resp.Request.URL)
+					if resp.Err != nil {
+						if resp.Err.Error() == "No requests" {
+							dialog.ShowInformation("Error", "No requests", window)
+							return
 						}
-						if showTime.Checked {
-							responseText += fmt.Sprintf("Time: %v\n", resp.Time)
-						}
-						responseText += fmt.Sprintf("Status: %s\n", resp.Response.Status)
-
-						if showBody.Checked {
-							if resp.Response.Body != nil {
-
-								body, err := io.ReadAll(resp.Response.Body)
-								if err == nil && len(body) > 0 {
-									if len(body) > 1000 {
-										responseText += fmt.Sprintf("ResponseBody: %s\n", string(body[:1000]))
-									} else {
-										responseText += fmt.Sprintf("ResponseBody: %s\n", string(body))
-									}
-								} else {
-									responseText += fmt.Sprintf("ResponseBody: Error reading body\n")
-								}
-							} else {
-								responseText += fmt.Sprintf("ResponseBody: nil\n")
-							}
-						}
-						if showHeaders.Checked {
-							if resp.Response.Header != nil {
-								responseText += "Headers:\n"
-								counter := 0
-								for k, v := range resp.Response.Header {
-									responseText += fmt.Sprintf("%s: %s\n", k, v)
-									counter++
-									if counter >= 10 {
-										responseText += fmt.Sprintf("...")
-										break
-									}
-								}
-							} else {
-								responseText += "Headers: nil\n"
-							}
-						}
-
-						lastRequests = append(lastRequests, responseText)
-						if len(lastRequests) > maxLines {
-							lastRequests = lastRequests[1:]
-						}
-						if resp.Response != nil {
-							if resp.Response.Body != nil {
-								resp.Response.Body.Close()
-							}
-						}
-						pendingUpdate = true
+						batchText.WriteString(fmt.Sprintf("Error: %v\n", resp.Err))
+						continue
 					}
+
+					if showRequest.Checked {
+						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.Method, resp.Request.URL)
+					}
+
+					if showTime.Checked {
+						fmt.Fprintf(&batchText, "Time: %v\n", resp.Time)
+					}
+
+					if resp.Response != nil {
+						fmt.Fprintf(&batchText, "Status: %s\n", resp.Response.Status)
+						if showBody.Checked && resp.Response.Body != nil {
+							body, err := io.ReadAll(resp.Response.Body)
+							if err == nil && len(body) > 0 {
+								bodyStr := string(body)
+								if len(bodyStr) > 1000 {
+									bodyStr = bodyStr[:1000] + "..."
+								}
+								fmt.Fprintf(&batchText, "ResponseBody: %s\n", bodyStr)
+							}
+							resp.Response.Body.Close()
+						}
+
+						if showHeaders.Checked && resp.Response.Header != nil {
+							batchText.WriteString("Headers:\n")
+							headerCount := 0
+							for k, v := range resp.Response.Header {
+								if headerCount >= MAX_HEADERS {
+									batchText.WriteString("...\n")
+									break
+								}
+								fmt.Fprintf(&batchText, "%s: %s\n", k, v)
+								headerCount++
+							}
+						}
+					}
+
+					entryText := batchText.String()
+					if len(entryText) > MAX_ENTRY_LEN {
+						entryText = entryText[:MAX_ENTRY_LEN] + "..."
+					}
+
+					mu.Lock()
+					ringBuffer[currentIndex] = entryText
+					currentIndex = (currentIndex + 1) % MAX_LINES
+					mu.Unlock()
+
+					pendingUpdate = true
+
 				case <-updateTicker.C:
 					updateUI()
 				}
