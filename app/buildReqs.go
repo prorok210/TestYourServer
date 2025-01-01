@@ -164,7 +164,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 		requestsContainer.Add(createRequestRow())
 	})
 
-	applyButton := widget.NewButton("Apply", func() {
+	applyButton := widget.NewButton("Ok", func() {
 		var err error
 
 		defer func() {

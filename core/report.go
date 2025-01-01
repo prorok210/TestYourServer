@@ -11,14 +11,13 @@ const (
 )
 
 type RequestReport struct {
-	Url      string
-	AvgTime  time.Duration
-	MinTime  time.Duration
-	MaxTime  time.Duration
-	Count    int
-	ReqCods  map[int]int
-	Errors   map[string]int
-	TestTime time.Time
+	Url     string
+	AvgTime time.Duration
+	MinTime time.Duration
+	MaxTime time.Duration
+	Count   int
+	ReqCods map[int]int
+	Errors  map[string]int
 }
 
 func reportPool(in <-chan *RequestInfo) []*RequestReport {
@@ -32,6 +31,7 @@ func reportPool(in <-chan *RequestInfo) []*RequestReport {
 
 	for {
 		req, ok := <-in
+
 		if !ok {
 			for _, v := range reqMap {
 				close(v.ch)
@@ -82,6 +82,7 @@ func calcReportLoop(in <-chan *RequestInfo, report *RequestReport) {
 		if !ok {
 			return
 		}
+
 		calcReport(&sum, req, report)
 	}
 }

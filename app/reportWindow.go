@@ -58,11 +58,12 @@ func showReport() {
 			errorsContent = "No errors.\n"
 		} else {
 			for err, count := range reqsRep.Errors {
-				wrappedError := core.WrapText(fmt.Sprintf("  - %s: %d", err, count), 100)
+				wrappedError := core.WrapText(fmt.Sprintf("  - %s: %d", err, count), MAX_ROW_LEN)
+				fmt.Println("wrappedError", wrappedError)
 				errorsContent += wrappedError + "\n"
 			}
 		}
-		errorsContentLabel := widget.NewRichTextFromMarkdown(errorsContent)
+		errorsContentLabel := widget.NewLabel(errorsContent)
 
 		sections = append(sections, container.NewVBox(
 			urlLabel,
@@ -76,6 +77,7 @@ func showReport() {
 	}
 
 	reportContent := container.NewVScroll(container.NewVBox(sections...))
+
 	if len(currentReports) == 0 {
 		reportContent = container.NewVScroll(widget.NewLabel("No reports."))
 	}

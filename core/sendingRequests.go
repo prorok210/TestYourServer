@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	DEFAULT_PROTO                  = "HTTPS"
 	DEFAULT_REQ_DELAY              = 100 * time.Millisecond
 	MIN_REQ_DELAY                  = 1 * time.Millisecond
 	MAX_REQ_DELAY                  = 6000 * time.Millisecond
@@ -44,6 +45,7 @@ type ReqSendingSettings struct {
 	Duration            time.Duration
 	RequestChanBufSize  int
 	ResponseChanBufSize int
+	Secure              bool
 }
 
 type CachedRequest struct {
@@ -88,7 +90,7 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqSettings *ReqSending
 		go func() {
 			defer sendingReqsWg.Done()
 			customTransport := &http.Transport{
-				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: reqSettings.Secure},
 				MaxIdleConns:        MAX_COUNT_WORKERS,
 				MaxIdleConnsPerHost: MAX_COUNT_WORKERS,
 			}

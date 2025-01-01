@@ -16,6 +16,7 @@ const (
 	OUT_REQ_CHAN_BUF       = 100
 	UPDATE_TEXT_GRID_DALEY = 200 * time.Millisecond
 	MAX_LINES              = 20
+	MAX_BODY_LEN           = 1000
 	MAX_ENTRY_LEN          = 2000
 	MAX_HEADERS            = 10
 )
@@ -85,7 +86,16 @@ func testButtonFunc() {
 		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
 
 		go func() {
-			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+			switch selectedProtocol {
+			case "HTTPS":
+				reqSetting.Secure = false
+				currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+			case "HTTP":
+				reqSetting.Secure = true
+				currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+			case "WebSocket":
+				break
+			}
 			displayCtxCancel()
 		}()
 
@@ -142,12 +152,11 @@ func testButtonFunc() {
 							return
 						}
 						countFailedReqs.Add(1)
-						batchText.WriteString(fmt.Sprintf("Error: %v\n", resp.Err))
-						continue
+						batchText.WriteString(fmt.Sprintf("Error: %v\n", core.TruncateString(resp.Err.Error(), MAX_ROW_LEN)))
 					}
 
 					if showRequest.Checked {
-						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.Method, resp.Request.URL)
+						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.Method, core.TruncateString(resp.Request.URL.String(), MAX_ROW_LEN))
 					}
 
 					if showTime.Checked {
@@ -158,14 +167,16 @@ func testButtonFunc() {
 						fmt.Fprintf(&batchText, "Status: %s\n", resp.Response.Status)
 						if showBody.Checked && resp.Response.Body != nil {
 							body, err := io.ReadAll(resp.Response.Body)
+							resp.Response.Body.Close()
+
 							if err == nil && len(body) > 0 {
-								bodyStr := string(body)
-								if len(bodyStr) > 1000 {
-									bodyStr = bodyStr[:1000] + "..."
+								bodyStr := core.WrapText(string(body), MAX_ROW_LEN)
+								if len(bodyStr) > MAX_BODY_LEN {
+									bodyStr = bodyStr[:MAX_BODY_LEN] + "..."
 								}
 								fmt.Fprintf(&batchText, "ResponseBody: %s\n", bodyStr)
 							}
-							resp.Response.Body.Close()
+
 						}
 
 						if showHeaders.Checked && resp.Response.Header != nil {

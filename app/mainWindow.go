@@ -46,7 +46,9 @@ var (
 	activRequsts         []*http.Request
 
 	// Protocol selection
-	protocolButton *widget.Button = widget.NewButton("Select protocol", func() {})
+	protocolButton   *widget.Button
+	protocolSelect   *widget.Select
+	selectedProtocol string
 
 	// Report button
 	reportButton     *widget.Button
@@ -214,6 +216,9 @@ func CreateAppWindow() {
 	testButton = widget.NewButton("Start testing", testButtonFunc)
 
 	reportButton = widget.NewButton("Show report", showReport)
+
+	protocolButton = widget.NewButton("Change protocol", showProtocolWindow)
+	selectedProtocol = core.DEFAULT_PROTO
 
 	configRequestsButton = widget.NewButton("Configurate requests", func() {
 		if testIsActiv {
