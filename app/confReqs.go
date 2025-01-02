@@ -98,7 +98,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 		methodSelect.SetSelected(req.method.Selected)
 
 		urlEntry := widget.NewEntry()
-		urlEntry.SetText(req.url.Text)
+		urlEntry.SetText(strings.TrimSpace(req.url.Text))
 
 		bodyEntry := widget.NewMultiLineEntry()
 		bodyEntry.SetText(req.body.Text)
@@ -218,9 +218,9 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 				}
 
 				if methodSelect.Selected != "" && urlEntry.Text != "" {
-					err = core.ValidateURL(urlEntry.Text)
-					if err != nil || urlEntry.Text == "" {
-						dialog.ShowInformation("Error", "Invalid URL format", confWindow)
+					err = core.ValidateURL(urlEntry.Text, selectedProtocol)
+					if err != nil {
+						dialog.ShowInformation("Error", err.Error(), confWindow)
 						return
 					}
 

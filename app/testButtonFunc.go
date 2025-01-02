@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -86,12 +85,14 @@ func testButtonFunc() {
 			Duration:            time.Duration(durationSlider.Value) * time.Second,
 			RequestChanBufSize:  100,
 			ResponseChanBufSize: 100,
+			Secure:              disableCheckTls,
+			Protocol:            selectedProtocol,
 		}
 
 		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
 
 		go func() {
-			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
+			currentReports = core.StartSendingRequests(outChan, reqSetting, testCtx)
 			displayCtxCancel()
 		}()
 
@@ -160,12 +161,10 @@ func testButtonFunc() {
 					}
 
 					if resp.Response != nil {
-						fmt.Fprintf(&batchText, "Status: %s\n", resp.Response.Status)
+						fmt.Fprintf(&batchText, "Status: %d\n", resp.Response.Status)
 						if showBody.Checked && resp.Response.Body != nil {
-							body, err := io.ReadAll(resp.Response.Body)
-							resp.Response.Body.Close()
-
-							if err == nil && len(body) > 0 {
+							body := resp.Response.Body
+							if len(body) > 0 {
 								bodyStr := core.WrapText(string(body), MAX_ROW_LEN)
 								if len(bodyStr) > MAX_BODY_LEN {
 									bodyStr = bodyStr[:MAX_BODY_LEN] + "..."
@@ -175,10 +174,10 @@ func testButtonFunc() {
 
 						}
 
-						if showHeaders.Checked && resp.Response.Header != nil {
+						if showHeaders.Checked && resp.Response.Headers != nil {
 							batchText.WriteString("Headers:\n")
 							headerCount := 0
-							for k, v := range resp.Response.Header {
+							for k, v := range resp.Response.Headers {
 								if headerCount >= MAX_HEADERS {
 									batchText.WriteString("...\n")
 									break

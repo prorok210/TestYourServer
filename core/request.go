@@ -18,7 +18,7 @@ func (p Protocol) String() string {
 
 type RequestInfo struct {
 	Time     time.Duration
-	Response *http.Response
+	Response *Response
 	Request  Request
 	Err      error
 }
@@ -82,6 +82,12 @@ func (r *WSRequest) GetHeaders() http.Header {
 
 func (r *WSRequest) GetBody() []byte {
 	return r.Payload
+}
+
+type Response struct {
+	Status  int
+	Headers http.Header
+	Body    []byte
 }
 
 var (

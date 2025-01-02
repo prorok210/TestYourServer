@@ -103,7 +103,7 @@ func calcReport(sum *time.Duration, req *RequestInfo, report *RequestReport) {
 	report.MaxTime = max(report.MaxTime, req.Time)
 
 	if req.Response != nil {
-		report.ReqCods[req.Response.StatusCode]++
+		report.ReqCods[req.Response.Status]++
 	}
 
 	if req.Err != nil {

@@ -26,6 +26,10 @@ func showProtocolWindow() {
 	protocolOptions := []string{"HTTP", "WS"}
 
 	protocolSelect = widget.NewSelect(protocolOptions, func(s string) {
+		if s != selectedProtocol.String() {
+			activRequsts = []core.Request{}
+			activRequstsRows = []*RequestRow{}
+		}
 		switch s {
 		case "HTTP":
 			selectedProtocol = core.HTTP

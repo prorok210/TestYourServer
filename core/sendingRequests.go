@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -31,7 +33,7 @@ const (
 	REQUEST_TIMEOUT                = 10 * time.Second
 )
 
-func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig, testCtx context.Context) []*RequestReport {
+func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig, testCtx context.Context) []*RequestReport {
 	reqsConfig = setReqSettings(reqsConfig)
 	if reqsConfig.Requests == nil {
 		outCh <- &RequestInfo{Err: errors.New("No requests")}
@@ -74,7 +76,11 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsCon
 					return
 				case <-ticker.C:
 					index := r.Intn(len(reqsConfig.Requests))
-					req := reqsConfig.Requests[index].(*HTTPRequest)
+					req, ok := reqsConfig.Requests[index].(*HTTPRequest)
+					if !ok {
+						outCh <- &RequestInfo{Err: errors.New("Unsupported request type")}
+						return
+					}
 					cached := reqsConfig.Requests[index].GetBody()
 
 					reqCopy := req.Clone(testCtx)
@@ -87,10 +93,12 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsCon
 					if err != nil && strings.Contains(err.Error(), "context canceled") {
 						return
 					}
+					body, _ := io.ReadAll(resp.Body)
+					resp.Body.Close()
 
 					reqInf := &RequestInfo{
 						Time:     time.Since(start),
-						Response: resp,
+						Response: &Response{Status: resp.StatusCode, Body: body, Headers: resp.Header},
 						Request:  req,
 						Err:      err,
 					}
@@ -111,35 +119,84 @@ func StartSendingHttpRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsCon
 			}
 		}
 
-		// handleWebSocket := func() {
-		// 	index := r.Intn(len(reqSettings.Requests))
+		handleWebSocket := func() {
+			defer sendingReqsWg.Done()
 
-		// 	dialer := websocket.Dialer{
-		// 		TLSClientConfig: &tls.Config{InsecureSkipVerify: reqSettings.Secure},
-		// 	}
+			index := r.Intn(len(reqsConfig.Requests))
+			req, ok := reqsConfig.Requests[index].(*WSRequest)
+			if !ok {
+				outCh <- &RequestInfo{Err: errors.New("Unsupported request type")}
+				return
+			}
 
-		// 	conn, resp, err := dialer.Dial(reqSettings.Requests[index].URI, reqCopy.Header)
+			dialer := websocket.Dialer{
+				TLSClientConfig:  &tls.Config{InsecureSkipVerify: reqsConfig.Secure},
+				HandshakeTimeout: REQUEST_TIMEOUT,
+			}
 
-		// 	defer sendingReqsWg.Done()
+			conn, _, err := dialer.Dial(reqsConfig.Requests[index].GetURI(), reqsConfig.Requests[index].GetHeaders())
+			defer conn.Close()
+			if err != nil {
+				outCh <- &RequestInfo{Err: err}
+				return
+			}
 
-		// 	ticker := time.NewTicker(reqSettings.Delay)
-		// 	defer ticker.Stop()
+			ticker := time.NewTicker(reqsConfig.Delay)
+			defer ticker.Stop()
 
-		// 	for {
-		// 		select {
-		// 		case <-testCtx.Done():
-		// 			return
+			for {
+				select {
+				case <-testCtx.Done():
+					return
+				case <-ticker.C:
+					start := time.Now()
 
-		// 		case <-ticker.C:
+					err := conn.WriteMessage(websocket.TextMessage, req.GetBody())
+					if err != nil {
+						outCh <- &RequestInfo{Err: err}
+						return
+					}
 
-		// 		}
-		// 	}
+					msgType, msg, err := conn.ReadMessage()
+					if err != nil {
+						outCh <- &RequestInfo{Err: err}
+						return
+					}
 
-		// }
+					duration := time.Since(start)
 
-		go handleHTTP()
+					reqInf := &RequestInfo{
+						Time:     duration,
+						Response: &Response{Status: msgType, Body: msg},
+						Request:  req,
+						Err:      err,
+					}
 
-		// go handleWebSocket()
+					select {
+					case outCh <- reqInf:
+					default:
+						fmt.Println("outCh is full, dropping request")
+					}
+
+					select {
+					case reportInCh <- reqInf:
+					default:
+						fmt.Println("reportInCh is full, dropping request")
+					}
+				}
+			}
+		}
+
+		switch reqsConfig.Protocol {
+		case HTTP:
+			go handleHTTP()
+		case WS:
+			go handleWebSocket()
+		default:
+			outCh <- &RequestInfo{Err: errors.New("Unsupported protocol")}
+			return nil
+		}
+
 	}
 
 	sendingReqsWg.Wait()
