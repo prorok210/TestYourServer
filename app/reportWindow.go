@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -12,6 +13,12 @@ import (
 const (
 	MAX_URL_LEN = 100
 	MAX_ROW_LEN = 100
+)
+
+var (
+	currentReports  []*core.RequestReport
+	countReqs       atomic.Int64
+	countFailedReqs atomic.Int64
 )
 
 func showReport() {

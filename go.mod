@@ -1,9 +1,8 @@
 module github.com/prorok210/TestYourServer
+
 go 1.23.4
 
-require (
-	fyne.io/fyne/v2 v2.5.2
-)
+require fyne.io/fyne/v2 v2.5.2
 
 require (
 	fyne.io/systray v1.11.0 // indirect
@@ -20,6 +19,7 @@ require (
 	github.com/go-text/typesetting v0.2.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20240223122105-ce5225dcaa49 // indirect
 	github.com/jsummers/gobmp v0.0.0-20151104160322-e2ba15ffa76e // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.4.0 // indirect

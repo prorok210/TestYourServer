@@ -2,9 +2,7 @@ package app
 
 import (
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -18,6 +16,12 @@ const (
 	MAX_COUNT_REQS = 100
 )
 
+var (
+	confWindowOpen   bool
+	activRequstsRows []*RequestRow
+	activRequsts     []core.Request
+)
+
 type RequestRow struct {
 	method    *widget.Select
 	url       *widget.Entry
@@ -26,7 +30,7 @@ type RequestRow struct {
 	container *fyne.Container
 }
 
-func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *bool) {
+func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 	confWindow := fyne.CurrentApp().NewWindow("Configure Requests")
 
 	requestsContainer := container.NewVBox()
@@ -168,7 +172,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 		var err error
 
 		defer func() {
-			*winOpen = false
+			confWindowOpen = false
 			if err == nil {
 				confWindow.Close()
 			}
@@ -214,9 +218,8 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 				}
 
 				if methodSelect.Selected != "" && urlEntry.Text != "" {
-					var url *url.URL
-					url, err = core.MustParseURL(urlEntry.Text)
-					if err != nil || url == nil {
+					err = core.ValidateURL(urlEntry.Text)
+					if err != nil || urlEntry.Text == "" {
 						dialog.ShowInformation("Error", "Invalid URL format", confWindow)
 						return
 					}
@@ -228,22 +231,48 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]*http.Request, winOpen *
 						delete:    deleteButton,
 						container: row,
 					})
-					*reqs = append(*reqs, &http.Request{
-						Method: methodSelect.Selected,
-						URL:    url,
-						Body:   io.NopCloser(strings.NewReader(bodyEntry.Text)),
-					})
+
+					var newReq core.Request
+
+					switch selectedProtocol {
+					case core.HTTP:
+						req, err := http.NewRequest(methodSelect.Selected, urlEntry.Text, strings.NewReader(bodyEntry.Text))
+						if err != nil {
+							dialog.ShowInformation("Error", "Invalid request", confWindow)
+							return
+						}
+						newReq = &core.HTTPRequest{
+							Request:    req,
+							CachedBody: []byte(bodyEntry.Text),
+						}
+					case core.WS:
+						newReq = &core.WSRequest{
+							URI:     urlEntry.Text,
+							Payload: []byte(bodyEntry.Text),
+						}
+					default:
+						dialog.ShowInformation("Error", "Invalid protocol", confWindow)
+						return
+					}
+
+					*reqs = append(*reqs, newReq)
 				}
 			}
 		}
 	})
 
 	confWindow.SetCloseIntercept(func() {
-		*winOpen = false
+		confWindowOpen = false
 		confWindow.Close()
 	})
 
-	content := container.NewBorder(nil, container.NewVBox(container.NewAdaptiveGrid(2, clearButton, addButton), applyButton), nil, nil, requestsContainer)
+	content := container.NewBorder(
+		nil,
+		container.NewVBox(container.NewAdaptiveGrid(2, clearButton, addButton), applyButton),
+		nil,
+		nil,
+		container.NewVScroll(requestsContainer),
+	)
 
 	confWindow.SetContent(content)
 	confWindow.Resize(fyne.NewSize(800, 600))

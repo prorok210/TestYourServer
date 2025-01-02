@@ -4,30 +4,64 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	"github.com/prorok210/TestYourServer/core"
+)
+
+var (
+	protocolWindowOpen bool
+	protocolSelect     *widget.Select
+	selectedProtocol   core.Protocol
+	secureCheck        *widget.Check
+	disableCheckTls    bool
 )
 
 func showProtocolWindow() {
+	if protocolWindowOpen {
+		return
+	}
+	protocolWindowOpen = true
+
 	protocolWindow := fyne.CurrentApp().NewWindow("Select protocol")
 
-	protocols := []string{"HTTPS", "HTTP", "WebSocket"}
+	protocolOptions := []string{"HTTP", "WS"}
 
-	protocolSelect = widget.NewSelect(protocols, func(s string) {
-		selectedProtocol = s
+	protocolSelect = widget.NewSelect(protocolOptions, func(s string) {
+		switch s {
+		case "HTTP":
+			selectedProtocol = core.HTTP
+		case "WS":
+			selectedProtocol = core.WS
+		}
 	})
 
-	if selectedProtocol == "" {
-		selectedProtocol = "HTTPS"
-	}
+	protocolSelect.SetSelected(selectedProtocol.String())
 
-	protocolSelect.SetSelected(selectedProtocol)
+	secureCheck = widget.NewCheck("Disable TLS checking", func(b bool) {
+		disableCheckTls = b
+	})
+	secureCheck.SetChecked(disableCheckTls)
 
-	protocolWindow.SetContent(container.NewVBox(
-		widget.NewLabel("Select protocol"),
-		protocolSelect,
-		widget.NewButton("OK", func() {
-			selectedProtocol = protocolSelect.Selected
-			protocolWindow.Close()
-		}),
-	))
+	protocolWindow.SetContent(
+		container.NewVBox(
+			widget.NewLabel("Select protocol"),
+			protocolSelect,
+			secureCheck,
+			widget.NewButton("OK", func() {
+				switch protocolSelect.Selected {
+				case "HTTP":
+					selectedProtocol = core.HTTP
+				case "WS":
+					selectedProtocol = core.WS
+				}
+				protocolWindow.Close()
+				protocolWindowOpen = false
+			}),
+		),
+	)
+
+	protocolWindow.SetOnClosed(func() {
+		protocolWindowOpen = false
+	})
+
 	protocolWindow.Show()
 }

@@ -19,9 +19,14 @@ func MustParseURL(rawURL string) (*url.URL, error) {
 	return parsedURL, nil
 }
 
-func setReqSettings(reqSettings *ReqSendingSettings) *ReqSendingSettings {
+func ValidateURL(rawURL string) error {
+	_, err := MustParseURL(rawURL)
+	return err
+}
+
+func setReqSettings(reqSettings *RequestsConfig) *RequestsConfig {
 	if reqSettings == nil {
-		return &ReqSendingSettings{
+		return &RequestsConfig{
 			Requests:            nil,
 			Count_Workers:       DEFAULT_COUNT_WORKERS,
 			Delay:               DEFAULT_REQ_DELAY,

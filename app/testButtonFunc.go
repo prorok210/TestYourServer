@@ -30,7 +30,7 @@ func startTesting() {
 	workersSlider.Disable()
 	reportButton.Disable()
 	configRequestsButton.Disable()
-	// protocolButton.Disable()
+	protocolButton.Disable()
 
 	testCtx, testCancel = context.WithTimeout(context.Background(), time.Duration(durationSlider.Value)*time.Minute)
 	displayCtx, displayCtxCancel = context.WithCancel(context.Background())
@@ -56,12 +56,17 @@ func endTesting() {
 	workersSlider.Enable()
 	reportButton.Enable()
 	configRequestsButton.Enable()
-	// protocolButton.Enable()
+	protocolButton.Enable()
 }
 
 func testButtonFunc() {
 	if confWindowOpen {
 		dialog.ShowInformation("Error", "Can't start testing while the settings window is open", window)
+		return
+	}
+
+	if protocolWindowOpen {
+		dialog.ShowInformation("Error", "Can't start testing while the protocol window is open", window)
 		return
 	}
 
@@ -74,7 +79,7 @@ func testButtonFunc() {
 		testCancel()
 	} else {
 		startTesting()
-		reqSetting := &core.ReqSendingSettings{
+		reqSetting := &core.RequestsConfig{
 			Requests:            activRequsts,
 			Count_Workers:       int(workersSlider.Value),
 			Delay:               time.Duration(delaySlider.Value) * time.Millisecond,
@@ -86,16 +91,7 @@ func testButtonFunc() {
 		outChan := make(chan *core.RequestInfo, OUT_REQ_CHAN_BUF)
 
 		go func() {
-			switch selectedProtocol {
-			case "HTTPS":
-				reqSetting.Secure = false
-				currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
-			case "HTTP":
-				reqSetting.Secure = true
-				currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
-			case "WebSocket":
-				break
-			}
+			currentReports = core.StartSendingHttpRequests(outChan, reqSetting, testCtx)
 			displayCtxCancel()
 		}()
 
@@ -156,7 +152,7 @@ func testButtonFunc() {
 					}
 
 					if showRequest.Checked {
-						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.Method, core.TruncateString(resp.Request.URL.String(), MAX_ROW_LEN))
+						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.GetMethod(), core.TruncateString(resp.Request.GetURI(), MAX_ROW_LEN))
 					}
 
 					if showTime.Checked {

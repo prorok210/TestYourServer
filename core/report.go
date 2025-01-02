@@ -1,7 +1,6 @@
 package core
 
 import (
-	"net/http"
 	"sync"
 	"time"
 )
@@ -21,7 +20,7 @@ type RequestReport struct {
 }
 
 func reportPool(in <-chan *RequestInfo) []*RequestReport {
-	reqMap := make(map[*http.Request]struct {
+	reqMap := make(map[Request]struct {
 		ch  chan *RequestInfo
 		rep *RequestReport
 	})
@@ -62,7 +61,7 @@ func reportPool(in <-chan *RequestInfo) []*RequestReport {
 			go func() {
 				calcReportLoop(repCh, report)
 
-				defer func(req *http.Request) {
+				defer func(req Request) {
 					calcRepWg.Done()
 					delete(reqMap, req)
 				}(req.Request)
@@ -89,7 +88,7 @@ func calcReportLoop(in <-chan *RequestInfo, report *RequestReport) {
 
 func calcReport(sum *time.Duration, req *RequestInfo, report *RequestReport) {
 	if report.Url == "" {
-		report.Url = req.Request.URL.String()
+		report.Url = req.Request.GetURI()
 	}
 
 	report.Count++

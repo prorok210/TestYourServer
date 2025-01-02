@@ -3,11 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -41,23 +39,13 @@ var (
 
 	// Configurate requests
 	configRequestsButton *widget.Button
-	confWindowOpen       bool
-	activRequstsRows     []*RequestRow
-	activRequsts         []*http.Request
 
 	// Protocol selection
-	protocolButton   *widget.Button
-	protocolSelect   *widget.Select
-	selectedProtocol string
+	protocolButton *widget.Button
 
 	// Report button
 	reportButton     *widget.Button
 	reportWindowOpen bool
-
-	// Report info
-	currentReports  []*core.RequestReport
-	countReqs       atomic.Int64
-	countFailedReqs atomic.Int64
 
 	// Sliders
 	delaySlider    *widget.Slider
@@ -226,7 +214,7 @@ func CreateAppWindow() {
 			return
 		}
 		if !confWindowOpen {
-			showConfReqWindow(&activRequstsRows, &activRequsts, &confWindowOpen)
+			showConfReqWindow(&activRequstsRows, &activRequsts)
 			confWindowOpen = true
 		}
 	})
