@@ -17,9 +17,11 @@ const (
 )
 
 var (
-	confWindowOpen   bool
-	activRequstsRows []*RequestRow
-	activRequsts     []core.Request
+	protocolButton    *widget.Button
+	confWindowOpen    bool
+	activRequstsRows  []*RequestRow
+	activRequsts      []core.Request
+	requestsContainer *fyne.Container
 )
 
 type RequestRow struct {
@@ -30,70 +32,70 @@ type RequestRow struct {
 	container *fyne.Container
 }
 
-func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
+func createRequestRow(deleteRow func(*fyne.Container)) *fyne.Container {
+	var row *fyne.Container
+	methodSelect := widget.NewSelect([]string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}, nil)
+	methodSelect.SetSelected("GET")
+
+	urlEntry := widget.NewEntry()
+	urlEntry.SetPlaceHolder("Enter URL (e.g. http://example.com)")
+
+	bodyEntry := widget.NewMultiLineEntry()
+	bodyEntry.SetPlaceHolder("Request body (optional)")
+	bodyEntry.SetMinRowsVisible(1)
+	bodyEntry.OnChanged = func(s string) {
+		if s == "" {
+			bodyEntry.SetPlaceHolder("Request body (optional)")
+			bodyEntry.SetMinRowsVisible(1)
+		} else {
+			bodyEntry.SetPlaceHolder("")
+			if len(strings.Split(s, "\n")) < 3 {
+				bodyEntry.SetMinRowsVisible(3)
+			} else {
+				bodyEntry.SetMinRowsVisible(len(strings.Split(s, "\n")))
+			}
+		}
+	}
+
+	deleteButton := widget.NewButton("❌", func() {
+		deleteRow(row)
+	})
+
+	split1 := container.NewHSplit(methodSelect, urlEntry)
+	split1.Offset = 0.01
+	split2 := container.NewHSplit(bodyEntry, deleteButton)
+	split2.Offset = 0.99
+
+	row = container.NewAdaptiveGrid(1,
+		container.NewHSplit(
+			split1,
+			split2,
+		),
+	)
+
+	return row
+}
+
+func deleteRow(row *fyne.Container) {
+	for i, r := range activRequstsRows {
+		if r.container == row {
+			activRequstsRows = append((activRequstsRows)[:i], (activRequstsRows)[i+1:]...)
+			break
+		}
+	}
+	requestsContainer.Remove(row)
+}
+
+func showConfReqWindow() {
 	confWindow := fyne.CurrentApp().NewWindow("Configure Requests")
 
-	requestsContainer := container.NewVBox()
+	requestsContainer = container.NewVBox()
 
-	deleteRow := func(row *fyne.Container) {
-		for i, r := range *reqsRows {
-			if r.container == row {
-				*reqsRows = append((*reqsRows)[:i], (*reqsRows)[i+1:]...)
-				break
-			}
-		}
-		requestsContainer.Remove(row)
+	if len(activRequstsRows) == 0 {
+		requestsContainer.Add(createRequestRow(deleteRow))
 	}
 
-	createRequestRow := func() *fyne.Container {
-		var row *fyne.Container
-		methodSelect := widget.NewSelect([]string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}, nil)
-		methodSelect.SetSelected("GET")
-
-		urlEntry := widget.NewEntry()
-		urlEntry.SetPlaceHolder("Enter URL (e.g. http://example.com)")
-
-		bodyEntry := widget.NewMultiLineEntry()
-		bodyEntry.SetPlaceHolder("Request body (optional)")
-		bodyEntry.SetMinRowsVisible(1)
-		bodyEntry.OnChanged = func(s string) {
-			if s == "" {
-				bodyEntry.SetPlaceHolder("Request body (optional)")
-				bodyEntry.SetMinRowsVisible(1)
-			} else {
-				bodyEntry.SetPlaceHolder("")
-				if len(strings.Split(s, "\n")) < 3 {
-					bodyEntry.SetMinRowsVisible(3)
-				} else {
-					bodyEntry.SetMinRowsVisible(len(strings.Split(s, "\n")))
-				}
-			}
-		}
-
-		deleteButton := widget.NewButton("❌", func() {
-			deleteRow(row)
-		})
-
-		split1 := container.NewHSplit(methodSelect, urlEntry)
-		split1.Offset = 0.01
-		split2 := container.NewHSplit(bodyEntry, deleteButton)
-		split2.Offset = 0.99
-
-		row = container.NewAdaptiveGrid(1,
-			container.NewHSplit(
-				split1,
-				split2,
-			),
-		)
-
-		return row
-	}
-
-	if len(*reqsRows) == 0 {
-		requestsContainer.Add(createRequestRow())
-	}
-
-	for _, req := range *reqsRows {
+	for _, req := range activRequstsRows {
 		methodSelect := widget.NewSelect([]string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}, nil)
 		methodSelect.SetSelected(req.method.Selected)
 
@@ -160,15 +162,20 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 			dialog.ShowInformation("Error", fmt.Sprintf("You can add a maximum of %d requests", MAX_COUNT_REQS), confWindow)
 			return
 		}
-		requestsContainer.Add(createRequestRow())
+		requestsContainer.Add(createRequestRow(deleteRow))
 	})
 
 	clearButton := widget.NewButton("Clear", func() {
 		requestsContainer.Objects = nil
-		requestsContainer.Add(createRequestRow())
+		requestsContainer.Add(createRequestRow(deleteRow))
 	})
 
 	applyButton := widget.NewButton("Ok", func() {
+		if protocolWindowOpen {
+			dialog.ShowInformation("Info", "Please close the settings window before exiting.", confWindow)
+			return
+		}
+
 		var err error
 
 		defer func() {
@@ -178,8 +185,8 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 			}
 		}()
 
-		*reqsRows = nil
-		*reqs = nil
+		activRequstsRows = nil
+		activRequsts = nil
 
 		for _, obj := range requestsContainer.Objects {
 			if row, ok := obj.(*fyne.Container); ok {
@@ -224,7 +231,7 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 						return
 					}
 
-					*reqsRows = append(*reqsRows, &RequestRow{
+					activRequstsRows = append(activRequstsRows, &RequestRow{
 						method:    methodSelect,
 						url:       urlEntry,
 						body:      bodyEntry,
@@ -255,20 +262,24 @@ func showConfReqWindow(reqsRows *[]*RequestRow, reqs *[]core.Request) {
 						return
 					}
 
-					*reqs = append(*reqs, newReq)
+					activRequsts = append(activRequsts, newReq)
 				}
 			}
 		}
 	})
 
 	confWindow.SetCloseIntercept(func() {
+		if protocolWindowOpen {
+			dialog.ShowInformation("Info", "Please close the settings window before exiting.", confWindow)
+			return
+		}
 		confWindowOpen = false
 		confWindow.Close()
 	})
 
 	content := container.NewBorder(
 		nil,
-		container.NewVBox(container.NewAdaptiveGrid(2, clearButton, addButton), applyButton),
+		container.NewVBox(container.NewAdaptiveGrid(2, clearButton, addButton), protocolButton, applyButton),
 		nil,
 		nil,
 		container.NewVScroll(requestsContainer),

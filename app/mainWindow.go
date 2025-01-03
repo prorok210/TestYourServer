@@ -40,9 +40,6 @@ var (
 	// Configurate requests
 	configRequestsButton *widget.Button
 
-	// Protocol selection
-	protocolButton *widget.Button
-
 	// Report button
 	reportButton     *widget.Button
 	reportWindowOpen bool
@@ -214,7 +211,7 @@ func CreateAppWindow() {
 			return
 		}
 		if !confWindowOpen {
-			showConfReqWindow(&activRequstsRows, &activRequsts)
+			showConfReqWindow()
 			confWindowOpen = true
 		}
 	})
@@ -262,13 +259,7 @@ func CreateAppWindow() {
 			delayContainer,
 			durationContainer,
 			workersContainer,
-			container.NewHBox(
-				layout.NewSpacer(),
-				protocolButton,
-				layout.NewSpacer(),
-				configRequestsButton,
-				layout.NewSpacer(),
-			),
+			configRequestsButton,
 		)),
 	)
 

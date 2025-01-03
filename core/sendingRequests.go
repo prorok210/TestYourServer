@@ -93,14 +93,17 @@ func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig,
 					if err != nil && strings.Contains(err.Error(), "context canceled") {
 						return
 					}
-					body, _ := io.ReadAll(resp.Body)
-					resp.Body.Close()
 
 					reqInf := &RequestInfo{
-						Time:     time.Since(start),
-						Response: &Response{Status: resp.StatusCode, Body: body, Headers: resp.Header},
-						Request:  req,
-						Err:      err,
+						Time:    time.Since(start),
+						Request: req,
+						Err:     err,
+					}
+
+					if resp != nil {
+						body, _ := io.ReadAll(resp.Body)
+						resp.Body.Close()
+						reqInf.Response = &Response{Status: resp.StatusCode, Body: body, Headers: resp.Header}
 					}
 
 					select {
