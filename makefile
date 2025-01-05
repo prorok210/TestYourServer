@@ -14,15 +14,73 @@ SRC := cmd/main.go
 
 .DEFAULT_GOAL := build
 
-.PHONY: build check-libs clean cross install-libs
-
 # --- Detect Operating System ---
 UNAME_S := $(shell uname -s)
+
+.PHONY: build check-libs clean cross install-libs check-go unsupported
+
+check-go:
+	@echo "Checking for Go compiler..."
+	@which go > /dev/null 2>&1
+	@if [ $$? -ne 0 ]; then \
+		echo "Go not found. Installing Go..."; \
+		$(MAKE) install-go; \
+	else \
+		echo "Go is already installed: $$(go version)"; \
+	fi
+
+# Target to install Go based on OS
+install-go:
+ifeq ($(OS), Windows_NT)
+	@echo "Installing Go via Chocolatey..."
+	@choco install golang -y
+	@echo "Verifying Go installation..."
+	@which go > /dev/null 2>&1 || { \
+		echo "Error: Go installation failed or not found in PATH."; \
+		exit 1; \
+	}
+	@echo "Go is installed: $$(go version)"
+else ifeq ($(UNAME_S), Darwin)
+	@echo "Installing Go via Homebrew..."
+	@brew list go &> /dev/null || { \
+		echo "Go not found. Installing Go..."; \
+		brew install go; \
+	}
+	@echo "Verifying Go installation..."
+	@which go > /dev/null 2>&1 || { \
+		echo "Error: Go installation failed or not found in PATH."; \
+		exit 1; \
+	}
+	@echo "Go is installed: $$(go version)"
+else ifeq ($(UNAME_S), Linux)
+	@echo "Installing Go via package manager..."
+	@if command -v apt-get &> /dev/null; then \
+		sudo apt-get update && sudo apt-get install -y golang-go; \
+	elif command -v dnf &> /dev/null; then \
+		sudo dnf install -y golang; \
+	elif command -v yum &> /dev/null; then \
+		sudo yum install -y golang; \
+	elif command -v pacman &> /dev/null; then \
+		sudo pacman -Syu go --noconfirm; \
+	else \
+		echo "Could not determine package manager to install Go. Please install Go manually."; \
+		exit 1; \
+	fi
+	@echo "Verifying Go installation..."
+	@which go > /dev/null 2>&1 || { \
+		echo "Error: Go installation failed or not found in PATH."; \
+		exit 1; \
+	}
+	@echo "Go is installed: $$(go version)"
+else
+	@echo "Error: Unsupported operating system for Go installation."
+	@exit 1
+endif
 
 # Target to install necessary libraries
 install-libs:
 	@echo "Checking and installing dependencies..."
-	
+
 ifeq ($(OS), Windows_NT)
 	@echo "Detected Windows."
 	
