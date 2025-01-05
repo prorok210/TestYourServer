@@ -29,6 +29,8 @@ func showProtocolWindow() {
 		if s != selectedProtocol.String() {
 			activRequsts = []core.Request{}
 			activRequstsRows = []*RequestRow{}
+			requestsContainer.Objects = []fyne.CanvasObject{}
+			requestsContainer.Add(createRequestRow())
 		}
 		switch s {
 		case "HTTP":

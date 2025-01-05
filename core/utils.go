@@ -7,42 +7,42 @@ import (
 	"time"
 )
 
-func ValidateURL(rawURL string, selectedProtocol Protocol) error {
+func ValidateURL(rawURL string, selectedProtocol *Protocol) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil || parsedURL.Host == "" {
-		return errors.New("invalid URL format")
+		return rawURL, errors.New("invalid URL format")
 	}
 
 	if parsedURL.Scheme == "" {
-		switch selectedProtocol {
+		switch *selectedProtocol {
 		case HTTP:
 			parsedURL.Scheme = "http"
 		case WS:
 			parsedURL.Scheme = "ws"
 		default:
-			return errors.New("unsupported protocol")
+			return rawURL, errors.New("unsupported protocol")
 		}
 	}
 
 	if parsedURL.Host == "" {
-		return errors.New("URL must have a valid host")
+		return rawURL, errors.New("URL must have a valid host")
 	}
 
-	switch selectedProtocol {
+	switch *selectedProtocol {
 	case HTTP:
 		if !strings.HasPrefix(parsedURL.Scheme, "http") {
-			return errors.New("URL scheme must be http or https for HTTP protocol")
+			return rawURL, errors.New("URL scheme must be http or https for HTTP protocol")
 		}
 	case WS:
 		if !strings.HasPrefix(parsedURL.Scheme, "ws") {
-			return errors.New("URL scheme must be ws or wss for WebSocket protocol")
+			return rawURL, errors.New("URL scheme must be ws or wss for WebSocket protocol")
 		}
 	default:
-		return errors.New("unsupported protocol")
+		return rawURL, errors.New("unsupported protocol")
 	}
 
-	return nil
+	return rawURL, nil
 }
 
 func setReqSettings(reqSettings *RequestsConfig) *RequestsConfig {

@@ -78,7 +78,7 @@ func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig,
 					index := r.Intn(len(reqsConfig.Requests))
 					req, ok := reqsConfig.Requests[index].(*HTTPRequest)
 					if !ok {
-						outCh <- &RequestInfo{Err: errors.New("Unsupported request type")}
+						outCh <- &RequestInfo{Request: req, Err: errors.New("Unsupported request type")}
 						return
 					}
 					cached := reqsConfig.Requests[index].GetBody()
@@ -128,7 +128,7 @@ func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig,
 			index := r.Intn(len(reqsConfig.Requests))
 			req, ok := reqsConfig.Requests[index].(*WSRequest)
 			if !ok {
-				outCh <- &RequestInfo{Err: errors.New("Unsupported request type")}
+				outCh <- &RequestInfo{Request: req, Err: errors.New("Unsupported request type")}
 				return
 			}
 
@@ -137,10 +137,17 @@ func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig,
 				HandshakeTimeout: REQUEST_TIMEOUT,
 			}
 
-			conn, _, err := dialer.Dial(reqsConfig.Requests[index].GetURI(), reqsConfig.Requests[index].GetHeaders())
-			defer conn.Close()
+			conn, _, err := dialer.DialContext(testCtx, reqsConfig.Requests[index].GetURI(), reqsConfig.Requests[index].GetHeaders())
+			defer func() {
+				if conn != nil {
+					conn.Close()
+				}
+			}()
 			if err != nil {
-				outCh <- &RequestInfo{Err: err}
+				if strings.Contains(err.Error(), "operation was canceled") {
+					return
+				}
+				outCh <- &RequestInfo{Request: req, Err: err}
 				return
 			}
 
@@ -156,13 +163,13 @@ func StartSendingRequests(outCh chan<- *RequestInfo, reqsConfig *RequestsConfig,
 
 					err := conn.WriteMessage(websocket.TextMessage, req.GetBody())
 					if err != nil {
-						outCh <- &RequestInfo{Err: err}
+						outCh <- &RequestInfo{Request: req, Err: err}
 						return
 					}
 
 					msgType, msg, err := conn.ReadMessage()
 					if err != nil {
-						outCh <- &RequestInfo{Err: err}
+						outCh <- &RequestInfo{Request: req, Err: err}
 						return
 					}
 

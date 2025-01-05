@@ -32,7 +32,7 @@ type RequestRow struct {
 	container *fyne.Container
 }
 
-func createRequestRow(deleteRow func(*fyne.Container)) *fyne.Container {
+func createRequestRow() *fyne.Container {
 	var row *fyne.Container
 	methodSelect := widget.NewSelect([]string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}, nil)
 	methodSelect.SetSelected("GET")
@@ -92,7 +92,7 @@ func showConfReqWindow() {
 	requestsContainer = container.NewVBox()
 
 	if len(activRequstsRows) == 0 {
-		requestsContainer.Add(createRequestRow(deleteRow))
+		requestsContainer.Add(createRequestRow())
 	}
 
 	for _, req := range activRequstsRows {
@@ -162,12 +162,12 @@ func showConfReqWindow() {
 			dialog.ShowInformation("Error", fmt.Sprintf("You can add a maximum of %d requests", MAX_COUNT_REQS), confWindow)
 			return
 		}
-		requestsContainer.Add(createRequestRow(deleteRow))
+		requestsContainer.Add(createRequestRow())
 	})
 
 	clearButton := widget.NewButton("Clear", func() {
 		requestsContainer.Objects = nil
-		requestsContainer.Add(createRequestRow(deleteRow))
+		requestsContainer.Add(createRequestRow())
 	})
 
 	applyButton := widget.NewButton("Ok", func() {
@@ -177,6 +177,7 @@ func showConfReqWindow() {
 		}
 
 		var err error
+		var url string
 
 		defer func() {
 			confWindowOpen = false
@@ -225,7 +226,7 @@ func showConfReqWindow() {
 				}
 
 				if methodSelect.Selected != "" && urlEntry.Text != "" {
-					err = core.ValidateURL(urlEntry.Text, selectedProtocol)
+					url, err = core.ValidateURL(urlEntry.Text, &selectedProtocol)
 					if err != nil {
 						dialog.ShowInformation("Error", err.Error(), confWindow)
 						return
@@ -243,7 +244,7 @@ func showConfReqWindow() {
 
 					switch selectedProtocol {
 					case core.HTTP:
-						req, err := http.NewRequest(methodSelect.Selected, urlEntry.Text, strings.NewReader(bodyEntry.Text))
+						req, err := http.NewRequest(methodSelect.Selected, url, strings.NewReader(bodyEntry.Text))
 						if err != nil {
 							dialog.ShowInformation("Error", "Invalid request", confWindow)
 							return

@@ -106,14 +106,83 @@ func testButtonFunc() {
 			defer updateTicker.Stop()
 
 			var mu sync.Mutex
-			var pendingUpdate bool
 			var batchText strings.Builder
 
-			updateUI := func() {
-				if !pendingUpdate {
-					return
+			processResp := func(resp *core.RequestInfo) {
+				batchText.Reset()
+
+				countReqs.Add(1)
+
+				if resp.Err != nil {
+					if resp.Err.Error() == "No requests" {
+						dialog.ShowInformation("Error", "No requests", window)
+						return
+					}
+					countFailedReqs.Add(1)
+					batchText.WriteString(fmt.Sprintf("Error: %v\n", core.TruncateString(resp.Err.Error(), MAX_ROW_LEN)))
 				}
+
+				if showRequest.Checked {
+					if resp.Request == nil {
+						batchText.WriteString("Request: empty\n")
+					} else {
+						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.GetMethod(), core.TruncateString(resp.Request.GetURI(), MAX_ROW_LEN))
+					}
+				}
+
+				if showTime.Checked {
+					fmt.Fprintf(&batchText, "Time: %v\n", resp.Time)
+				}
+
+				if resp.Response != nil {
+					fmt.Fprintf(&batchText, "Status: %d\n", resp.Response.Status)
+					if showBody.Checked && resp.Response.Body != nil {
+						body := resp.Response.Body
+						if len(body) > 0 {
+							bodyStr := core.WrapText(string(body), MAX_ROW_LEN)
+							if len(bodyStr) > MAX_BODY_LEN {
+								bodyStr = bodyStr[:MAX_BODY_LEN] + "..."
+							}
+							fmt.Fprintf(&batchText, "ResponseBody: %s\n", bodyStr)
+						} else {
+							batchText.WriteString("ResponseBody: empty\n")
+						}
+					}
+
+					if showHeaders.Checked && resp.Response.Headers != nil {
+						batchText.WriteString("Headers:\n")
+						headerCount := 0
+						if len(resp.Response.Headers) == 0 {
+							batchText.WriteString("empty\n")
+						}
+						for k, v := range resp.Response.Headers {
+							if headerCount >= MAX_HEADERS {
+								batchText.WriteString("...\n")
+								break
+							}
+							fmt.Fprintf(&batchText, "%s: %s\n", k, v)
+							headerCount++
+						}
+					}
+				} else {
+					batchText.WriteString("Response: empty\n")
+				}
+
+				entryText := batchText.String()
+				if len(entryText) > MAX_ENTRY_LEN {
+					entryText = entryText[:MAX_ENTRY_LEN] + "..."
+				}
+
 				mu.Lock()
+				ringBuffer[currentIndex] = entryText
+				currentIndex = (currentIndex + 1) % MAX_LINES
+				mu.Unlock()
+			}
+
+			updateUI := func() {
+				mu.Lock()
+				defer mu.Unlock()
+
 				var displayText strings.Builder
 				for i := 0; i < MAX_LINES; i++ {
 					idx := (currentIndex - i - 1 + MAX_LINES) % MAX_LINES
@@ -123,83 +192,22 @@ func testButtonFunc() {
 					}
 				}
 				text := displayText.String()
-				mu.Unlock()
 
 				if text != "" {
 					infoReqsGrid.SetText(text)
 				}
-				pendingUpdate = false
 			}
 
 			for {
 				select {
 				case <-displayCtx.Done():
+					updateUI()
 					return
 				case resp, ok := <-outChan:
 					if !ok {
 						return
 					}
-					batchText.Reset()
-
-					countReqs.Add(1)
-
-					if resp.Err != nil {
-						if resp.Err.Error() == "No requests" {
-							dialog.ShowInformation("Error", "No requests", window)
-							return
-						}
-						countFailedReqs.Add(1)
-						batchText.WriteString(fmt.Sprintf("Error: %v\n", core.TruncateString(resp.Err.Error(), MAX_ROW_LEN)))
-					}
-
-					if showRequest.Checked {
-						fmt.Fprintf(&batchText, "Request: %v %v\n", resp.Request.GetMethod(), core.TruncateString(resp.Request.GetURI(), MAX_ROW_LEN))
-					}
-
-					if showTime.Checked {
-						fmt.Fprintf(&batchText, "Time: %v\n", resp.Time)
-					}
-
-					if resp.Response != nil {
-						fmt.Fprintf(&batchText, "Status: %d\n", resp.Response.Status)
-						if showBody.Checked && resp.Response.Body != nil {
-							body := resp.Response.Body
-							if len(body) > 0 {
-								bodyStr := core.WrapText(string(body), MAX_ROW_LEN)
-								if len(bodyStr) > MAX_BODY_LEN {
-									bodyStr = bodyStr[:MAX_BODY_LEN] + "..."
-								}
-								fmt.Fprintf(&batchText, "ResponseBody: %s\n", bodyStr)
-							}
-
-						}
-
-						if showHeaders.Checked && resp.Response.Headers != nil {
-							batchText.WriteString("Headers:\n")
-							headerCount := 0
-							for k, v := range resp.Response.Headers {
-								if headerCount >= MAX_HEADERS {
-									batchText.WriteString("...\n")
-									break
-								}
-								fmt.Fprintf(&batchText, "%s: %s\n", k, v)
-								headerCount++
-							}
-						}
-					}
-
-					entryText := batchText.String()
-					if len(entryText) > MAX_ENTRY_LEN {
-						entryText = entryText[:MAX_ENTRY_LEN] + "..."
-					}
-
-					mu.Lock()
-					ringBuffer[currentIndex] = entryText
-					currentIndex = (currentIndex + 1) % MAX_LINES
-					mu.Unlock()
-
-					pendingUpdate = true
-
+					processResp(resp)
 				case <-updateTicker.C:
 					updateUI()
 				}
@@ -216,23 +224,27 @@ func startTimer(maxDuration time.Duration) {
 	defer ticker.Stop()
 	var remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds int
 
+	updateStats := func() {
+		elapsed += time.Second
+		remaining := maxDuration - elapsed
+		if remaining <= 0 {
+			return
+		}
+		remainingMinutes = int(remaining.Minutes())
+		remainingSeconds = int(remaining.Seconds()) % 60
+		elapsedMinutes = int(elapsed.Minutes())
+		elapsedSeconds = int(elapsed.Seconds()) % 60
+		StatsLabel.SetText(fmt.Sprintf("Time left: %02d:%02d\nTime elapsed: %02d:%02d\nRequests sent: %d\nRequests failed: %d",
+			remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds, countReqs.Load(), countFailedReqs.Load()))
+	}
+
 	for {
 		select {
 		case <-ticker.C:
-			elapsed += time.Second
-			remaining := maxDuration - elapsed
-			if remaining <= 0 {
-				return
-			}
-			remainingMinutes = int(remaining.Minutes())
-			remainingSeconds = int(remaining.Seconds()) % 60
-			elapsedMinutes = int(elapsed.Minutes())
-			elapsedSeconds = int(elapsed.Seconds()) % 60
-			StatsLabel.SetText(fmt.Sprintf("Time left: %02d:%02d\nTime elapsed: %02d:%02d\nRequests sent: %d\nRequests failed: %d",
-				remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds, countReqs.Load(), countFailedReqs.Load()))
+			updateStats()
 		case <-displayCtx.Done():
-			StatsLabel.SetText(fmt.Sprintf("Time left: %02d:%02d\nTime elapsed: %02d:%02d\nRequests sent: %d\nRequests failed: %d",
-				remainingMinutes, remainingSeconds, elapsedMinutes, elapsedSeconds, countReqs.Load(), countFailedReqs.Load()))
+			time.Sleep(UPDATE_TEXT_GRID_DALEY)
+			updateStats()
 			return
 		}
 	}
