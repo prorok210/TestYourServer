@@ -28,7 +28,7 @@ check-version: check-go
 		exit 1; \
 	fi
 
-install-deps: check-version
+install-deps: check-version 
 	@echo "Installing dependencies..."
 	@if [ "$(OS)" = "linux" ]; then \
 		if [ -f /etc/debian_version ]; then \
@@ -44,14 +44,14 @@ install-deps: check-version
 	elif [ "$(OS)" = "darwin" ]; then \
 		echo "macOS system detected. Installing dependencies..."; \
 		brew install $(MACOS_PACKAGES); \
-	elif [ "$(OS)" = "mingw32" ] || [ "$(OS)" = "mingw64" ]; then \
-		echo "Windows system detected. Checking if MSYS2 or MinGW is installed..."; \
-		if ! command -v pacman &> /dev/null; then \
-			echo "pacman (MSYS2/MinGW) is not installed. Please install MSYS2/MinGW or use vcpkg."; \
-			exit 1; \
-		fi \
-		echo "MSYS2/MinGW detected. Installing dependencies..."; \
-		pacman -S --noconfirm $(WINDOWS_PACKAGES); \
+	elif echo "$(OS)" | grep -iqE "mingw|msys"; then \
+    	echo "Windows system detected. Checking if MSYS2 or MinGW is installed..."; \
+    	if ! command -v pacman &> /dev/null; then \
+    	    echo "pacman (MSYS2/MinGW) not found. Please install MSYS2 or MinGW."; \
+    	    exit 1; \
+    	fi; \
+    	echo "MSYS2/MinGW detected. Installing dependencies..."; \
+    	pacman -S --noconfirm $(WINDOWS_PACKAGES); \
 	elif [ "$(OS)" = "windows_nt" ]; then \
 		echo "Windows NT system detected. Please manually install GLFW using vcpkg or other tools."; \
 		exit 1; \
@@ -60,7 +60,6 @@ install-deps: check-version
 		exit 1; \
 	fi
 	@echo "All dependencies installed."
-
 prepare-dir:
 	@echo "Preparing build directory..."
 	@mkdir -p $(OUTPUT_DIR)
@@ -80,4 +79,3 @@ clean:
 .DEFAULT_GOAL := build-prod
 
 .PHONY: check-go check-version prepare-dir build-dev build-prod clean install-deps
-
